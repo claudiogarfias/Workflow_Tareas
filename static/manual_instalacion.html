@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual de Procedimiento - Instalación y Publicación en IIS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0f172a;
+            --primary-light: #1e293b;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --success: #16a34a;
+            --warning: #ca8a04;
+            --danger: #dc2626;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text: #334155;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation for screen view */
+        .sidebar {
+            width: 280px;
+            background-color: var(--primary);
+            color: white;
+            padding: 2rem 1.5rem;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            overflow-y: auto;
+            z-index: 10;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-brand {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 2.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #fff;
+        }
+
+        .sidebar-brand span {
+            color: var(--accent);
+        }
+
+        .sidebar-menu {
+            list-style: none;
+        }
+
+        .sidebar-item {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-link {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: block;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+
+        .sidebar-link:hover, .sidebar-link.active {
+            color: white;
+            background-color: var(--primary-light);
+        }
+
+        .sidebar-link.active {
+            border-left: 4px solid var(--accent);
+        }
+
+        /* Main Content Container */
+        .main-content {
+            margin-left: 280px;
+            flex-grow: 1;
+            padding: 3rem 4rem;
+            max-width: 1000px;
+        }
+
+        /* Header controls */
+        .controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 2rem;
+            gap: 1rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background-color: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--background);
+        }
+
+        /* Document Styling */
+        .doc-card {
+            background-color: var(--surface);
+            border-radius: 0.75rem;
+            padding: 4rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+
+        /* Portada (Cover Page) */
+        .cover {
+            text-align: center;
+            padding: 4rem 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 4rem;
+        }
+
+        .cover-org {
+            font-family: 'Outfit', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .cover-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.75rem;
+            color: var(--primary);
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+        }
+
+        .cover-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-light);
+            max-width: 600px;
+            margin: 0 auto 3rem auto;
+        }
+
+        .cover-meta {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            max-width: 500px;
+            margin: 0 auto;
+            text-align: left;
+            background-color: var(--background);
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .meta-label {
+            font-weight: 600;
+            color: var(--primary-light);
+        }
+
+        .meta-value {
+            color: var(--text);
+        }
+
+        /* Section Headings */
+        h1, h2, h3, h4 {
+            font-family: 'Outfit', sans-serif;
+            color: var(--primary);
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+            margin-top: 3.5rem;
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin-top: 2rem;
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            color: var(--accent);
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1.25rem 1.5rem;
+            border-radius: 0.5rem;
+            margin: 1.5rem 0;
+            border-left: 4px solid;
+            display: flex;
+            gap: 1rem;
+            font-size: 0.95rem;
+        }
+
+        .alert-info {
+            background-color: #eff6ff;
+            border-left-color: var(--accent);
+            color: #1e40af;
+        }
+
+        .alert-warning {
+            background-color: #fef9c3;
+            border-left-color: var(--warning);
+            color: #854d0e;
+        }
+
+        .alert-danger {
+            background-color: #fef2f2;
+            border-left-color: var(--danger);
+            color: #991b1b;
+        }
+
+        .alert-title {
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Code blocks */
+        .code-block-container {
+            position: relative;
+            margin: 1.5rem 0;
+        }
+
+        pre {
+            background-color: #0f172a;
+            color: #f8fafc;
+            padding: 1.25rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            border: 1px solid #334155;
+        }
+
+        code {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f1f5f9;
+            color: var(--danger);
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+            font-size: inherit;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            border: none;
+            padding: 0.35rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        /* Steps navigation styling */
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background-color: var(--accent);
+            color: white;
+            border-radius: 50%;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-right: 0.5rem;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Footer */
+        .doc-footer {
+            margin-top: 4rem;
+            border-top: 1px solid var(--border);
+            padding-top: 2rem;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+
+        /* PRINT STYLING - VERY IMPORTANT FOR PERFECT PDF */
+        @media print {
+            body {
+                background-color: white;
+                color: black;
+            }
+
+            .sidebar, .controls, .copy-btn {
+                display: none !important;
+            }
+
+            .main-content {
+                margin-left: 0 !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+
+            .doc-card {
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                background: white !important;
+            }
+
+            .cover {
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                border-bottom: none !important;
+                margin-bottom: 0 !important;
+                page-break-after: always;
+            }
+
+            .cover-title {
+                font-size: 3.5rem;
+            }
+
+            h1 {
+                page-break-before: always;
+                margin-top: 0 !important;
+                padding-top: 1.5cm;
+            }
+
+            pre {
+                background-color: #f8fafc !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+
+            code {
+                color: #000 !important;
+            }
+
+            .alert {
+                border: 1px solid #cbd5e1 !important;
+                background-color: #f8fafc !important;
+                color: black !important;
+                page-break-inside: avoid;
+            }
+
+            .alert-danger {
+                border-left: 5px solid var(--danger) !important;
+            }
+
+            .alert-warning {
+                border-left: 5px solid var(--warning) !important;
+            }
+
+            .alert-info {
+                border-left: 5px solid var(--accent) !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span>Workflow</span> Tareas
+        </div>
+        <ul class="sidebar-menu">
+            <li class="sidebar-item"><a href="#cover" class="sidebar-link active">Portada</a></li>
+            <li class="sidebar-item"><a href="#requisitos" class="sidebar-link">Requisitos Previos</a></li>
+            <li class="sidebar-item"><a href="#paso1" class="sidebar-link">Paso 1: Instalar Python</a></li>
+            <li class="sidebar-item"><a href="#paso2" class="sidebar-link">Paso 2: HttpPlatformHandler</a></li>
+            <li class="sidebar-item"><a href="#paso3" class="sidebar-link">Paso 3: Copia de Archivos</a></li>
+            <li class="sidebar-item"><a href="#paso4" class="sidebar-link">Paso 4: Dependencias</a></li>
+            <li class="sidebar-item"><a href="#paso5" class="sidebar-link">Paso 5: Permisos SQLite</a></li>
+            <li class="sidebar-item"><a href="#paso6" class="sidebar-link">Paso 6: Configurar IIS</a></li>
+            <li class="sidebar-item"><a href="#diagnostico" class="sidebar-link">Resolución de Problemas</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <div class="controls no-print">
+            <button class="btn btn-secondary" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">Volver al Inicio</button>
+            <button class="btn btn-primary" onclick="window.print()">Exportar a PDF (Ctrl + P)</button>
+        </div>
+
+        <div class="doc-card">
+            <!-- Portada Section -->
+            <div id="cover" class="cover">
+                <div class="cover-org">Garantía de Procesos y Auditoría Interna</div>
+                <h1 class="cover-title">Manual de Instalación y Publicación en IIS</h1>
+                <p class="cover-subtitle">Guía técnica procedimental detallada para el despliegue del aplicativo "Workflow de Tareas v2" bajo servidor corporativo.</p>
+                
+                <div class="cover-meta">
+                    <div class="meta-label">Servidor Destino:</div>
+                    <div class="meta-value">LH-PENTANA-01</div>
+                    
+                    <div class="meta-label">Dominio (DNS):</div>
+                    <div class="meta-value">losheroes.losheroes.cl</div>
+                    
+                    <div class="meta-label">Sistema Operativo:</div>
+                    <div class="meta-value">Windows Server 2019</div>
+                    
+                    <div class="meta-label">Servidor Web:</div>
+                    <div class="meta-value">IIS (Internet Information Services)</div>
+                    
+                    <div class="meta-label">Motor de Base de Datos:</div>
+                    <div class="meta-value">SQLite (workflow_tareas.db)</div>
+                    
+                    <div class="meta-label">Tecnología Backend:</div>
+                    <div class="meta-value">Python 3.10+ / Flask / Waitress</div>
+                </div>
+            </div>
+
+            <!-- Requisitos Previos -->
+            <section id="requisitos">
+                <h1>Requisitos Previos</h1>
+                <p>Antes de iniciar con el procedimiento de instalación en el servidor <strong>LH-PENTANA-01</strong>, verifique que cuenta con las siguientes condiciones:</p>
+                <ul>
+                    <li><strong>Acceso de Administrador:</strong> Credenciales de administrador local en el servidor Windows Server 2019.</li>
+                    <li><strong>Servidor de IIS Activado:</strong> El rol de "Servidor Web (IIS)" debe estar habilitado con el servicio de herramientas de administración del IIS.</li>
+                    <li><strong>Acceso a Red / Internet:</strong> Habilitación de navegación para descarga del instalador de Python y el módulo HttpPlatformHandler, o disponer de los archivos instaladores locales.</li>
+                    <li><strong>Puerto Disponible:</strong> Puerto HTTP 80 (o HTTPS 443) libre y configurado en el Firewall para el dominio <code>losheroes.losheroes.cl</code>.</li>
+                </ul>
+
+                <div class="alert alert-info">
+                    <div>
+                        <div class="alert-title">Nota Arquitectónica</div>
+                        La aplicación se compone de un backend Flask y una base de datos SQLite embebida. Para producción en IIS, se utilizará <strong>Waitress</strong> como servidor WSGI (puente local) y el módulo <strong>HttpPlatformHandler</strong> de Microsoft para administrar los subprocesos de Python de manera transparente.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paso 1: Instalar Python -->
+            <section id="paso1">
+                <h1><span class="step-num">1</span>Instalación de Python en el Servidor</h1>
+                <p>En el servidor <strong>LH-PENTANA-01</strong>, ejecute los siguientes pasos:</p>
+                <ol>
+                    <li>Descargue el instalador oficial de <strong>Python (versión 3.10 o superior)</strong> desde <a href="https://www.python.org/downloads/windows/" target="_blank">python.org</a> (se recomienda la versión 3.10.x de 64 bits).</li>
+                    <li>Ejecute el instalador descargado como Administrador.</li>
+                    <li><strong>CRÍTICO:</strong> En la primera ventana del instalador, marque la casilla <strong>"Add Python 3.xx to PATH"</strong>. Esto permitirá la ejecución global de Python.</li>
+                    <li>Seleccione <strong>"Install Now"</strong> o elija una ruta personalizada si su organización lo requiere (ej. <code>C:\Program Files\Python310</code>).</li>
+                    <li>Abra una consola de PowerShell (o CMD) como Administrador y verifique la correcta instalación ejecutando:</li>
+                </ol>
+                
+                <div class="code-block-container">
+                    <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    <pre><code>python --version
+pip --version</code></pre>
+                </div>
+            </section>
+
+            <!-- Paso 2: HttpPlatformHandler -->
+            <section id="paso2">
+                <h1><span class="step-num">2</span>Instalación de Microsoft HttpPlatformHandler</h1>
+                <p>El módulo <strong>HttpPlatformHandler</strong> permite a IIS gestionar procesos de backend de forma ágil y redirigir el tráfico del puerto de IIS (80/443) hacia la aplicación Python de forma automática.</p>
+                <ol>
+                    <li>Descargue el instalador oficial de la extensión de IIS desde la página de Microsoft:
+                        <ul>
+                            <li><a href="https://www.iis.net/downloads/microsoft/httpplatformhandler" target="_blank">HttpPlatformHandler en IIS.net</a> o el enlace directo al MSI de 64 bits.</li>
+                        </ul>
+                    </li>
+                    <li>Ejecute el instalador <code>httpPlatformHandler_amd64.msi</code> en el servidor <strong>LH-PENTANA-01</strong>.</li>
+                    <li>Siga el asistente de instalación estándar (Siguiente, Siguiente, Finalizar).</li>
+                    <li>Reinicie el servicio de IIS para aplicar la extensión ejecutando en la consola de comandos de administración:</li>
+                </ol>
+
+                <div class="code-block-container">
+                    <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    <pre><code>iisreset</code></pre>
+                </div>
+            </section>
+
+            <!-- Paso 3: Copia de Archivos -->
+            <section id="paso3">
+                <h1><span class="step-num">3</span>Preparación del Directorio del Aplicativo</h1>
+                <p>Es indispensable estructurar los archivos de la aplicación en el directorio raíz de publicaciones de IIS.</p>
+                <ol>
+                    <li>Cree una carpeta dedicada para la aplicación en la ruta clásica de IIS en Windows Server:
+                        <br><code>C:\inetpub\wwwroot\WorkflowTareas</code>
+                    </li>
+                    <li>Copie y pegue en este directorio los siguientes archivos y carpetas del proyecto:
+                        <ul>
+                            <li><code>server.py</code> (Backend Flask principal)</li>
+                            <li><code>run_waitress.py</code> (Arrancador de producción WSGI)</li>
+                            <li><code>web.config</code> (Archivo de configuración de IIS)</li>
+                            <li><code>requirements.txt</code> (Archivo de dependencias de Python)</li>
+                            <li><code>workflow_tareas.db</code> (Base de datos SQLite inicial)</li>
+                            <li>Carpeta <code>static/</code> (Archivos frontend: HTML, JS, CSS y componentes gráficos)</li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <div class="alert alert-warning">
+                    <div>
+                        <div class="alert-title">Importante</div>
+                        Evite copiar carpetas como <code>.venv</code>, <code>.git</code> o archivos de desarrollo local que aumenten el peso innecesariamente. Las dependencias en el servidor deben instalarse de forma limpia y directa.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paso 4: Dependencias -->
+            <section id="paso4">
+                <h1><span class="step-num">4</span>Instalación de Dependencias de Python</h1>
+                <p>Una vez copiados los archivos, es necesario instalar las bibliotecas de Python en el servidor para que el backend funcione.</p>
+                <ol>
+                    <li>Abra la consola de <strong>Símbolo del Sistema (CMD)</strong> o <strong>PowerShell</strong> como Administrador.</li>
+                    <li>Navegue al directorio de la aplicación:</li>
+                </ol>
+
+                <div class="code-block-container">
+                    <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    <pre><code>cd C:\inetpub\wwwroot\WorkflowTareas</code></pre>
+                </div>
+
+                <ol start="3">
+                    <li>Ejecute la instalación de dependencias corporativas, incluyendo <code>waitress</code> (servidor WSGI para producción Windows):</li>
+                </ol>
+
+                <div class="code-block-container">
+                    <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    <pre><code>pip install -r requirements.txt waitress</code></pre>
+                </div>
+            </section>
+
+            <!-- Paso 5: Permisos SQLite -->
+            <section id="paso5">
+                <h1><span class="step-num">5</span>Configuración de Permisos en la Carpeta (Paso Crítico)</h1>
+                <p>Al utilizar una base de datos <strong>SQLite</strong> (<code>workflow_tareas.db</code>), la base de datos se guarda en un archivo de disco ordinario. Para que la aplicación pueda registrar cambios, tareas, auditorías y logs, el usuario que ejecuta el pool de aplicaciones en IIS (identidad del sitio web) requiere permisos de <strong>Modificación y Escritura</strong>.</p>
+                
+                <div class="alert alert-danger">
+                    <div>
+                        <div class="alert-title">Riesgo Operativo Crítico</div>
+                        Si omite este paso, el aplicativo cargará la pantalla inicial, pero al intentar crear, editar o eliminar tareas, el servidor arrojará un error <strong>500 Internal Server Error</strong> debido a que SQLite no podrá escribir en el archivo ni generar los archivos de transacciones temporales (<code>.db-journal</code> o <code>.db-wal</code>) en el directorio.
+                    </div>
+                </div>
+
+                <p>Siga estos pasos al pie de la letra para asignar los permisos necesarios:</p>
+                <ol>
+                    <li>Navegue mediante el Explorador de Archivos de Windows a <code>C:\inetpub\wwwroot</code>.</li>
+                    <li>Haga clic secundario sobre la carpeta <strong><code>WorkflowTareas</code></strong> y seleccione <strong>Propiedades</strong>.</li>
+                    <li>Vaya a la pestaña de <strong>Seguridad</strong> y haga clic en el botón <strong>Editar...</strong></li>
+                    <li>En la ventana de permisos, pulse el botón <strong>Agregar...</strong></li>
+                    <li>Escriba el nombre del grupo de usuarios locales de IIS: <strong><code>IIS_IUSRS</code></strong> y pulse en <strong>Comprobar nombres</strong>. El sistema debe subrayar el nombre confirmando su existencia.</li>
+                    <li>Haga clic en <strong>Aceptar</strong>.</li>
+                    <li>Seleccione <code>IIS_IUSRS</code> de la lista y en la ventana de permisos inferior, marque la casilla de permitir para <strong>"Modificar"</strong> y <strong>"Escritura"</strong>. (La lectura y ejecución se marcarán automáticamente).</li>
+                    <li>Haga clic en <strong>Aplicar</strong> y luego en <strong>Aceptar</strong> en todas las ventanas.</li>
+                </ol>
+            </section>
+
+            <!-- Paso 6: Configurar IIS -->
+            <section id="paso6">
+                <h1><span class="step-num">6</span>Creación y Publicación del Sitio Web en IIS</h1>
+                <p>Siga esta secuencia para dar de alta la aplicación en IIS utilizando el dominio corporativo requerido:</p>
+                
+                <ol>
+                    <li>Abra el <strong>Administrador de Internet Information Services (IIS)</strong> desde las herramientas administrativas de Windows o ejecutando <code>inetmgr</code>.</li>
+                    <li>En el panel izquierdo, despliegue el nombre del servidor (<code>LH-PENTANA-01</code>) y haga clic derecho sobre <strong>Sitios (Sites)</strong>. Elija la opción <strong>Agregar sitio web... (Add Website...)</strong>.</li>
+                    <li>Complete los datos en el cuadro de diálogo:
+                        <ul>
+                            <li><strong>Nombre del sitio:</strong> <code>WorkflowTareas</code></li>
+                            <li><strong>Ruta de acceso física:</strong> Seleccione la carpeta creada <code>C:\inetpub\wwwroot\WorkflowTareas</code></li>
+                            <li><strong>Enlace:</strong>
+                                <ul>
+                                    <li>Tipo: <code>http</code></li>
+                                    <li>Dirección IP: <code>Todas las no asignadas</code> (o la IP específica del servidor <code>LH-PENTANA-01</code>)</li>
+                                    <li>Puerto: <code>80</code></li>
+                                    <li>Nombre de host: <strong><code>losheroes.losheroes.cl</code></strong></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                    <li>Asegúrese de que la casilla <strong>"Iniciar sitio web inmediatamente"</strong> esté marcada.</li>
+                    <li>Haga clic en <strong>Aceptar</strong>.</li>
+                </ol>
+
+                <h3>Resolución DNS / Mapeo en Clientes</h3>
+                <div class="alert alert-info">
+                    <div>
+                        <div class="alert-title">Configuración de Red</div>
+                        Para que los usuarios puedan acceder mediante el dominio corporativo <code>http://losheroes.losheroes.cl</code>, se debe registrar una entrada tipo <strong>A</strong> en el DNS corporativo de la organización que apunte el dominio <code>losheroes.losheroes.cl</code> a la dirección IP física del servidor <code>LH-PENTANA-01</code>.
+                        <br><br>
+                        <em>Para pruebas locales rápidas en el servidor o cliente:</em> Puede editar el archivo hosts de Windows (<code>C:\Windows\System32\drivers\etc\hosts</code>) y añadir la línea:
+                        <br><code>IP_DEL_SERVIDOR losheroes.losheroes.cl</code>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Resolución de Problemas -->
+            <section id="diagnostico">
+                <h1>Resolución de Problemas (Diagnóstico)</h1>
+                <p>Si la aplicación muestra errores al cargarse (como <strong>500 Internal Server Error</strong> o <strong>502 Bad Gateway</strong>), verifique los siguientes puntos de control de bitácora:</p>
+                
+                <h3>1. Archivo <code>python.log</code></h3>
+                <p>El módulo HttpPlatformHandler redirigirá la consola estándar de Python directamente a un archivo log para diagnosticar errores. Revise el archivo generado automáticamente en:</p>
+                <p><code>C:\inetpub\wwwroot\WorkflowTareas\python.log</code></p>
+                <p>Los errores comunes reportados en este archivo suelen ser:</p>
+                <ul>
+                    <li><code>ModuleNotFoundError: No module named 'flask'</code>: Ocurre si las dependencias no se instalaron de forma global o si el script `web.config` no localiza el ejecutable correcto de Python. Modifique el parámetro <code>processPath</code> en <code>web.config</code> con la ruta completa a su binario de Python.</li>
+                    <li><code>sqlite3.OperationalError: unable to open database file</code>: Ocurre si omitió el paso de otorgar permisos de modificación a <code>IIS_IUSRS</code>.</li>
+                </ul>
+
+                <h3>2. Ajuste manual de web.config</h3>
+                <p>Si Python se instaló en una ruta no estándar en <strong>LH-PENTANA-01</strong>, abra el archivo <code>web.config</code> con permisos de administrador y especifique la ruta exacta en <code>processPath</code>:</p>
+                
+                <div class="code-block-container">
+                    <pre><code>&lt;!-- Ejemplo con ruta absoluta en web.config --&gt;
+&lt;httpPlatform stdoutLogEnabled="true" stdoutLogFile=".\python.log" startupTimeLimit="60" 
+              processPath="C:\Program Files\Python310\python.exe" 
+              arguments="run_waitress.py"&gt;</code></pre>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <div class="doc-footer">
+                Documento de Procedimiento Interno. Diseñado para CCAF Los Héroes. Auditoría Continua de Tareas. v2.0 - 2026.
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Copy to clipboard helper
+        function copyCode(button) {
+            const container = button.parentElement;
+            const code = container.querySelector('code').innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                button.innerText = '¡Copiado!';
+                setTimeout(() => {
+                    button.innerText = 'Copiar';
+                }, 2000);
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+            });
+        }
+
+        // Active link dynamic styling on scroll
+        const sections = document.querySelectorAll('section, .cover');
+        const navLinks = document.querySelectorAll('.sidebar-link');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

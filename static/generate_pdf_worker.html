@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Worker PDF Generator</title>
+    <!-- Cargar html2pdf.js desde cdnjs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f1f5f9;
+        }
+        #status {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 20px;
+        }
+        #container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        /* Para que no se vea el sidebar en el PDF generado */
+        .sidebar {
+            display: none !important;
+        }
+        .controls {
+            display: none !important;
+        }
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Cargando el manual de procedimiento...</div>
+    <div id="container">
+        Cargando contenido...
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const containerDiv = document.getElementById('container');
+
+        async function start() {
+            try {
+                statusDiv.innerText = "Obteniendo contenido de manual_instalacion.html...";
+                const response = await fetch('manual_instalacion.html');
+                if (!response.ok) {
+                    throw new Error("No se pudo cargar manual_instalacion.html");
+                }
+                const htmlText = await response.text();
+                
+                // Parsear el HTML y extraer el contenido de la clase .doc-card (el manual en sí)
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+                const docCard = doc.querySelector('.doc-card');
+                
+                if (!docCard) {
+                    throw new Error("No se encontró el elemento .doc-card en el archivo de origen");
+                }
+                
+                // Inyectar el contenido en el contenedor local
+                containerDiv.innerHTML = '';
+                containerDiv.appendChild(docCard);
+                
+                // Inyectar los estilos del manual original en la cabecera para que se renderice igual
+                const styles = doc.querySelectorAll('style, link[rel="stylesheet"]');
+                styles.forEach(style => document.head.appendChild(style.cloneNode(true)));
+
+                statusDiv.innerText = "Generando PDF y convirtiendo a binario (esto puede tardar unos segundos)...";
+
+                // Configuración de html2pdf
+                const opt = {
+                    margin:       [15, 15, 15, 15],
+                    filename:     'manual_instalacion.pdf',
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true, logging: false },
+                    jsPDF:        { unit: 'mm', format: 'letter', orientation: 'portrait' },
+                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+                };
+
+                // Generar PDF y subirlo al servidor local
+                html2pdf().from(containerDiv).set(opt).toPdf().get('pdf').then(async function (pdf) {
+                    statusDiv.innerText = "PDF generado en memoria. Enviando al backend...";
+                    
+                    const pdfBase64 = pdf.output('datauristring').split(',')[1];
+                    
+                    const postResponse = await fetch('/api/save-pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename: 'manual_instalacion.pdf',
+                            pdf_base64: pdfBase64
+                        })
+                    });
+                    
+                    const result = await postResponse.json();
+                    if (result.status === 'success') {
+                        statusDiv.innerHTML = '<span style="color: green;">¡ÉXITO! El PDF se ha generado y guardado correctamente en: ' + result.filepath + '</span>';
+                        console.log("PDF generado y guardado exitosamente");
+                        // Crear elemento testigo para el subagente
+                        const doneElem = document.createElement('div');
+                        doneElem.id = 'done-flag';
+                        doneElem.innerText = 'FINISHED_SUCCESSFULLY';
+                        document.body.appendChild(doneElem);
+                    } else {
+                        throw new Error(result.message);
+                    }
+                });
+
+            } catch (err) {
+                statusDiv.innerHTML = '<span style="color: red;">Error: ' + err.message + '</span>';
+                console.error(err);
+                const errorElem = document.createElement('div');
+                errorElem.id = 'error-flag';
+                errorElem.innerText = 'FINISHED_WITH_ERROR: ' + err.message;
+                document.body.appendChild(errorElem);
+            }
+        }
+
+        // Iniciar el proceso al cargar la página
+        window.addEventListener('load', start);
+    </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Entornos virtuales
+.venv/
+env/
+venv/
+
+# Archivos de la base de datos
+*.db
+workflow_tareas.db
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+
+# Archivos temporales
+tmp_*.txt
+*.tmp
+
+# Configuración del IDE
+.vscode/
+.idea/
+
+# Documentos generados / basura
+*.log

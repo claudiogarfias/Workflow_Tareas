@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#107C41",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e1e2e1",
+                        "surface": "#F3F2F1",
+                        "background": "#F3F2F1",
+                        "on-surface": "#1a1c1c",
+                        "on-surface-variant": "#404752",
+                        "outline": "#717783",
+                        "outline-variant": "#c0c7d4",
+                        "primary-container": "#107C41",
+                        "on-primary-container": "#ffffff",
+                        "surface-container": "#efeeed",
+                        "surface-container-low": "#f4f3f2",
+                        "surface-container-lowest": "#ffffff",
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .kanban-scrollbar::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .kanban-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .kanban-scrollbar::-webkit-scrollbar-thumb {
+            background: #e3e2e1;
+            border-radius: 10px;
+        }
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-[#F3F2F1] text-on-surface font-body antialiased">
+<!-- TopAppBar Component (from COMPONENTS_12) -->
+<header class="bg-white/80 dark:bg-[#1a1c1c]/80 backdrop-blur-md sticky top-0 w-full z-50 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+<div class="flex items-center justify-between px-6 py-4 w-full">
+<div class="flex items-center gap-4">
+<button class="hover:bg-surface-container-high transition-colors p-2 rounded-lg active:scale-95 duration-200">
+<span class="material-symbols-outlined text-[#107C41] dark:text-[#2ecc71]">menu</span>
+</button>
+<h1 class="font-['Inter'] font-semibold tracking-tight text-on-surface text-lg">Audit Workspace</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="hidden md:flex items-center bg-surface-container-low rounded-lg p-1 mr-4">
+<button class="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-[#107C41] shadow-sm flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-sm">grid_view</span> Kanban
+                </button>
+<button class="px-3 py-1.5 rounded-md text-sm font-medium text-on-surface-variant hover:text-[#107C41] flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-sm">list</span> List
+                </button>
+</div>
+<button class="hover:bg-surface-container-high transition-colors p-2 rounded-lg active:scale-95 duration-200">
+<span class="material-symbols-outlined text-on-surface-variant">filter_list</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-[#107C41] flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                AD
+            </div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-6 pb-24 md:pb-8 min-h-screen">
+<!-- Board Header / Toolbar -->
+<div class="px-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h2 class="text-2xl font-['Inter'] font-bold tracking-tight text-on-surface">Ongoing Audits</h2>
+<p class="text-on-surface-variant text-sm mt-1">Manage and track quality assessments</p>
+</div>
+<div class="flex gap-3">
+<!-- Mobile View Toggle -->
+<div class="flex md:hidden items-center bg-surface-container-low rounded-lg p-1">
+<button class="p-2 rounded-md bg-white text-[#107C41] shadow-sm">
+<span class="material-symbols-outlined text-sm">grid_view</span>
+</button>
+<button class="p-2 rounded-md text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">list</span>
+</button>
+</div>
+<button class="bg-[#107C41] text-white px-5 py-2.5 rounded-xl font-semibold text-sm shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">add</span>
+                New Task/Audit
+            </button>
+</div>
+</div>
+<!-- Kanban Board Area -->
+<div class="px-6 overflow-x-auto kanban-scrollbar">
+<div class="flex gap-8 min-w-max pb-4">
+<!-- Column: Pendientes -->
+<div class="w-80 flex flex-col gap-4">
+<div class="flex items-center justify-between px-1">
+<div class="flex items-center gap-2">
+<h3 class="font-semibold text-on-surface">Pendientes</h3>
+<span class="bg-surface-container text-on-surface-variant px-2.5 py-0.5 rounded-full text-xs font-bold">3</span>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Card 1 -->
+<div class="bg-white p-4 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_16px_rgba(0,0,0,0.08)] border-l-4 border-surface-container transition-all cursor-pointer group">
+<div class="flex items-start justify-between mb-3">
+<span class="bg-surface-container text-on-surface-variant text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded">Internal</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm opacity-0 group-hover:opacity-100 transition-opacity">edit</span>
+</div>
+<h4 class="font-semibold text-on-surface leading-tight mb-2">Quarterly Financial Review</h4>
+<div class="flex flex-wrap gap-2 mb-4">
+<span class="bg-[#107C41]/10 text-[#107C41] text-[11px] px-2 py-0.5 rounded-full font-medium">Finance</span>
+<span class="bg-orange-100 text-orange-800 text-[11px] px-2 py-0.5 rounded-full font-medium">High Priority</span>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-bold">JD</div>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-amber-100 flex items-center justify-center text-[10px] font-bold">MS</div>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+<span class="text-[11px] font-medium">Oct 24</span>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-white p-4 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_16px_rgba(0,0,0,0.08)] border-l-4 border-surface-container transition-all cursor-pointer">
+<h4 class="font-semibold text-on-surface leading-tight mb-2">GDPR Compliance Check</h4>
+<p class="text-on-surface-variant text-xs line-clamp-2 mb-4">Verification of customer data storage protocols across EU nodes.</p>
+<div class="flex items-center justify-between mt-auto">
+<span class="bg-surface-container text-on-surface-variant text-[11px] px-2 py-0.5 rounded-full font-medium">Compliance</span>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-base">attach_file</span>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700">RB</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Column: En curso -->
+<div class="w-80 flex flex-col gap-4">
+<div class="flex items-center justify-between px-1">
+<div class="flex items-center gap-2">
+<h3 class="font-semibold text-on-surface">En curso</h3>
+<span class="bg-[#107C41] text-white px-2.5 py-0.5 rounded-full text-xs font-bold">2</span>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Card 3 -->
+<div class="bg-white p-4 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden group cursor-pointer border-l-4 border-[#107C41] transition-all">
+<div class="flex items-start justify-between mb-3">
+<div class="flex items-center gap-1 text-[#107C41] font-bold text-[10px] uppercase">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">trending_up</span>
+                                Active Now
+                            </div>
+<span class="material-symbols-outlined text-on-surface-variant text-lg">more_vert</span>
+</div>
+<h4 class="font-semibold text-on-surface leading-tight mb-3">Server Farm Security Audit</h4>
+<div class="w-full bg-surface-container h-1.5 rounded-full mb-4 overflow-hidden">
+<div class="bg-[#107C41] h-full w-2/3"></div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-base">checklist</span>
+<span class="text-[11px] font-medium">8/12 tasks</span>
+</div>
+<div class="w-7 h-7 rounded-full bg-surface-container border-2 border-white overflow-hidden">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAp3nrLRJ8G881-UsmOGlA0QS-c4a6xpo2nQJGAfn75GIazdtleKYYyw98JetLU2v3oJ3g_EwdNrdW6EVlgzP02Sq7QQjkM5VpbArospRSvuIhGUtzFMjCg4gbPnx1x582XR_-RD9oYq1x9zR7DhbntW8ZTOBLFK0BkQz1K2sJGN30RQ6ziuP68OZhlN0ExqB20XdNvohKcmGw9x4l3hrOR7pYWtb_bbZj4lG4XZjYYvKVbUjql82e79AS1lGJMkLoK9Y-frCHoPAM"/>
+</div>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="bg-white p-4 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-l-4 border-[#107C41] relative overflow-hidden group cursor-pointer transition-all">
+<h4 class="font-semibold text-on-surface leading-tight mb-4">Supplier Ethics Review</h4>
+<div class="flex flex-wrap gap-2 mb-4">
+<span class="bg-purple-100 text-purple-800 text-[11px] px-2 py-0.5 rounded-full font-medium">ESG</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="text-[11px] font-bold text-[#107C41]">DUE TODAY</div>
+<div class="flex -space-x-1">
+<div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-700">LW</div>
+<div class="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center text-[10px] font-bold text-rose-700">KH</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Column: Completadas -->
+<div class="w-80 flex flex-col gap-4">
+<div class="flex items-center justify-between px-1">
+<div class="flex items-center gap-2">
+<h3 class="font-semibold text-on-surface">Completadas</h3>
+<span class="bg-surface-container-low text-on-surface-variant px-2.5 py-0.5 rounded-full text-xs font-bold">1</span>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<div class="flex flex-col gap-3 opacity-80">
+<!-- Card 5 -->
+<div class="bg-white p-4 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-outline-variant/20 transition-all cursor-pointer">
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-1.5 text-[#107C41]">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Verified</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Sep 28</span>
+</div>
+<h4 class="font-semibold text-on-surface leading-tight mb-3 line-through decoration-on-surface-variant/40">Employee Access Audit</h4>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<div class="flex items-center gap-1 text-[11px]">
+<span class="material-symbols-outlined text-sm">chat_bubble_outline</span>
+                                14
+                            </div>
+<div class="flex items-center gap-1 text-[11px]">
+<span class="material-symbols-outlined text-sm">attachment</span>
+                                3
+                            </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar Component (from COMPONENTS_12) -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-white/80 dark:bg-[#1a1c1c]/80 backdrop-blur-md border-t border-outline-variant/15 shadow-[0_-8px_40px_rgba(0,0,0,0.04)] z-50 rounded-t-xl md:hidden">
+<a class="flex flex-col items-center justify-center text-[#107C41] dark:text-[#2ecc71] bg-[#107C41]/10 rounded-xl px-3 py-1 font-['Inter'] text-[11px] font-medium tracking-wide active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-[#107C41] dark:hover:text-[#2ecc71] font-['Inter'] text-[11px] font-medium tracking-wide active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="mt-1">Users</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-[#107C41] dark:hover:text-[#2ecc71] font-['Inter'] text-[11px] font-medium tracking-wide active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="mt-1">History</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-[#107C41] dark:hover:text-[#2ecc71] font-['Inter'] text-[11px] font-medium tracking-wide active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

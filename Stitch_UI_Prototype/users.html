@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "error": "#ba1a1a",
+            "on-primary": "#ffffff",
+            "primary-fixed-dim": "#a3c9ff",
+            "on-secondary": "#ffffff",
+            "surface-variant": "#e3e2e1",
+            "surface-bright": "#faf9f8",
+            "surface": "#faf9f8",
+            "on-error": "#ffffff",
+            "secondary-fixed-dim": "#adc8f2",
+            "on-secondary-fixed-variant": "#2d486b",
+            "on-error-container": "#93000a",
+            "background": "#F3F2F1",
+            "surface-container": "#efeeed",
+            "secondary-container": "#b8d3fd",
+            "tertiary-fixed-dim": "#ffb689",
+            "tertiary-fixed": "#ffdbc8",
+            "primary-fixed": "#d3e3ff",
+            "inverse-surface": "#2f3130",
+            "on-secondary-container": "#405b7f",
+            "tertiary-container": "#bc5b00",
+            "error-container": "#ffdad6",
+            "outline": "#717783",
+            "inverse-primary": "#a3c9ff",
+            "secondary": "#456084",
+            "primary-container": "#107C41",
+            "on-tertiary-fixed": "#311300",
+            "surface-container-low": "#f4f3f2",
+            "surface-tint": "#107C41",
+            "inverse-on-surface": "#f1f0ef",
+            "on-primary-container": "#ffffff",
+            "surface-container-lowest": "#ffffff",
+            "surface-dim": "#dadad9",
+            "on-tertiary": "#ffffff",
+            "secondary-fixed": "#d3e3ff",
+            "on-background": "#1a1c1c",
+            "on-tertiary-container": "#ffffff",
+            "surface-container-high": "#e9e8e7",
+            "on-primary-fixed": "#001c39",
+            "on-primary-fixed-variant": "#004883",
+            "on-surface": "#1a1c1c",
+            "surface-container-highest": "#e3e2e1",
+            "on-surface-variant": "#404752",
+            "on-secondary-fixed": "#001c39",
+            "on-tertiary-fixed-variant": "#743500",
+            "outline-variant": "#c0c7d4",
+            "primary": "#107C41",
+            "tertiary": "#974700"
+          },
+          fontFamily: {
+            "headline": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .active-nav-pill {
+      font-variation-settings: 'FILL' 1;
+    }
+    .fluent-shadow {
+      box-shadow: 0 8px 32px rgba(26,28,28,0.06);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-[#107C41]/20">
+<!-- TopAppBar Component -->
+<header class="bg-white/80 dark:bg-[#1a1c1c]/80 backdrop-blur-md sticky top-0 w-full z-50 flex items-center justify-between px-6 py-4 shadow-[0_4px_30px_rgba(0,0,0,0.05)]">
+<div class="flex items-center gap-4">
+<div class="p-2 hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer active:scale-95 duration-200">
+<span class="material-symbols-outlined text-[#107C41] dark:text-[#2ecc71]">menu</span>
+</div>
+<h1 class="font-['Inter'] font-semibold tracking-tight text-on-surface text-lg">Audit Workspace</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-6 mr-6 hidden md:flex">
+<a class="font-medium text-on-surface-variant hover:text-[#107C41] transition-colors" href="#">Dashboard</a>
+<a class="text-[#107C41] font-bold border-b-2 border-[#107C41]" href="#">Users</a>
+<a class="font-medium text-on-surface-variant hover:text-[#107C41] transition-colors" href="#">History</a>
+<a class="font-medium text-on-surface-variant hover:text-[#107C41] transition-colors" href="#">Settings</a>
+</div>
+<button class="p-2 hover:bg-surface-container-high transition-colors rounded-lg text-on-surface-variant hover:text-[#107C41]">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 py-8 pb-32">
+<!-- Action Bar / Sub-header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+<div class="space-y-1">
+<h2 class="text-2xl font-bold tracking-tight text-on-surface">User Management</h2>
+<p class="text-on-surface-variant text-sm">Review and manage access permissions for 42 team members.</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-highest hover:bg-surface-container-high transition-colors text-on-surface text-sm font-medium rounded-xl">
+<span class="material-symbols-outlined text-sm">sort</span>
+        Sort
+      </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-highest hover:bg-surface-container-high transition-colors text-on-surface text-sm font-medium rounded-xl">
+<span class="material-symbols-outlined text-sm">filter_alt</span>
+        Filter
+      </button>
+<button class="flex items-center gap-2 px-5 py-2 bg-primary text-on-primary text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity active:scale-95 duration-200">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">add</span>
+        Manage Access
+      </button>
+</div>
+</div>
+<!-- User Grid -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- User Card 1: Featured/Admin -->
+<div class="md:col-span-8 bg-surface-container-lowest rounded-xl p-6 fluent-shadow border-l-4 border-primary">
+<div class="flex items-start justify-between">
+<div class="flex gap-4">
+<img class="w-16 h-16 rounded-full object-cover bg-surface-container" data-alt="Professional headshot of a male executive" src="https://lh3.googleusercontent.com/aida-public/AB6AXuABTp0abOt19f1WHZhfPUVhPC5hsCJUSGaKtmb8Qy1gK_zSBVBwMCNIfHRzpHteG_IzhBvpGowKMSCPVurvtyY93JrL89Zuj8loDPq01dfdp6lrIhEkkcmM7OPgtjFRt83e3_0ETVZRsc_juQCoOxtVwWIGHPeKxbosGhamulh-MuMOVdll20xZS3uq5LmlmWlnne-V4QHjjMmQCi4ie0cb7EHU_onlQHqNfMf_A2UGhxO6raSz_-abKSVcEo7nzRMCdz0lTd5_ty8"/>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-lg font-semibold text-on-surface">Alex Thompson</h3>
+<span class="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">Admin</span>
+</div>
+<p class="text-on-surface-variant text-sm">alex.thompson@auditflow.com</p>
+<div class="mt-4 flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full">Compliance Lead</span>
+<span class="px-3 py-1 bg-surface-container text-on-surface-variant text-xs font-medium rounded-full">Global Access</span>
+</div>
+</div>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<div class="mt-8 grid grid-cols-3 gap-4 border-t border-surface-container pt-6">
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Last Activity</p>
+<p class="text-sm font-medium mt-1">2 mins ago</p>
+</div>
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Audits Managed</p>
+<p class="text-sm font-medium mt-1">124</p>
+</div>
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Risk Level</p>
+<p class="text-sm font-medium mt-1 text-primary">Low</p>
+</div>
+</div>
+</div>
+<!-- User Card 2 -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl p-6 fluent-shadow">
+<div class="flex flex-col items-center text-center">
+<img class="w-20 h-20 rounded-full object-cover mb-4" data-alt="Portrait of a female professional smiling" src="https://lh3.googleusercontent.com/aida-public/AB6AXuApeeCg3EXbKLdWSkJTpF3LU3yMp9gJb3ClLZxm9sHKO0_LNELTn8td_VPBq4yMhRYkm9rZSK2iK9j1aocGOjl3IgEiXv38_30uWDCIJhzUJUrS6ZxrcY6JkV3bH2uj7_k3yIbUb_NGSnwJiOwAEr9vp4nZCTTgELK2phNS9RJV6wgu4VfKh2i0oUoE11FOc7NkUC7SPLq0ZPpK0qESdLagmQclOOcATwtIr2HuNCDlmdCr8BMtk3KUWwcmXW0XPcJZrPHckSozQ8k"/>
+<h3 class="text-md font-semibold text-on-surface">Sarah Jenkins</h3>
+<p class="text-on-surface-variant text-xs">Senior Auditor</p>
+<div class="mt-4 flex gap-2">
+<span class="bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">In Progress</span>
+</div>
+<button class="mt-6 w-full py-2 bg-surface-container hover:bg-surface-container-high hover:text-primary transition-colors rounded-lg text-sm font-medium active:scale-95">View Profile</button>
+</div>
+</div>
+<!-- User Card 3 -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl p-6 fluent-shadow flex flex-col justify-between">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">MD</div>
+<span class="material-symbols-outlined text-primary">verified_user</span>
+</div>
+<div class="mt-6">
+<h3 class="font-semibold text-on-surface">Marcus Dupont</h3>
+<p class="text-on-surface-variant text-xs">marcus.d@auditflow.com</p>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<span class="text-xs text-on-surface-variant font-medium">External Partner</span>
+<span class="w-2 h-2 rounded-full bg-error"></span>
+</div>
+</div>
+<!-- User Card 4 -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl p-6 fluent-shadow border-l-4 border-surface-variant">
+<div class="flex gap-4 items-center mb-4">
+<img class="w-12 h-12 rounded-full object-cover" data-alt="Profile photo of a man wearing glasses" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFyJ7OXd69IGmLNfHJWDvMpx-Fda1E0pneb3jPuSFhmwkDqzLC7KVpHhFXHXNYS0vnCBA4zQ6Y_cGsQAUi2lr0-NxPrUTbEqcOGyt7Un97Wx38PGAlJ21-HmUfB5YscvCHM3qh9ItiGejGbK48NlT-SbUd1rB0v2mCNPnOxjEk76nnY_JRroU3A3qqJXLPpXq5A7NLtjg8g2aovR9-Xw_JEkW2VzuGc0LUNsCEk31VVBCINaEA-6l-i9jdYIqHyPQNhikfnFgznak"/>
+<div>
+<h3 class="font-semibold text-on-surface">David Chen</h3>
+<p class="text-on-surface-variant text-xs">Junior Analyst</p>
+</div>
+</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">Joined 3 months ago. Currently assigned to the Q3 Logistics Audit.</p>
+<div class="mt-4 flex items-center gap-4">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-white bg-surface-dim flex items-center justify-center text-[8px]">TC</div>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-primary text-white flex items-center justify-center text-[8px]">JD</div>
+</div>
+<span class="text-[10px] text-on-surface-variant font-medium">+2 Team members</span>
+</div>
+</div>
+<!-- User Card 5 -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl p-6 fluent-shadow">
+<div class="flex items-center justify-between mb-4">
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">person_add</span>
+</div>
+<span class="text-xs font-medium text-primary">Pending</span>
+</div>
+<h3 class="font-semibold text-on-surface">Invitation Sent</h3>
+<p class="text-xs text-on-surface-variant mt-1">elena.rodriguez@external.com</p>
+<button class="mt-6 text-xs font-bold text-error uppercase tracking-wider hover:underline active:scale-95 transition-transform">Revoke Invite</button>
+</div>
+</div>
+</main>
+<!-- BottomNavBar Component -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-3 bg-white/80 dark:bg-[#1a1c1c]/80 backdrop-blur-md z-50 rounded-t-xl border-t border-outline-variant/15 shadow-[0_-8px_40px_rgba(0,0,0,0.04)]">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-[#107C41] transition-all cursor-pointer active:scale-90 duration-150">
+<span class="material-symbols-outlined mb-1">dashboard</span>
+<span class="font-['Inter'] text-[11px] font-medium tracking-wide">Dashboard</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#107C41] dark:text-[#2ecc71] bg-[#107C41]/10 rounded-xl px-3 py-1 active:scale-90 duration-150 cursor-pointer">
+<span class="material-symbols-outlined mb-1 active-nav-pill">group</span>
+<span class="font-['Inter'] text-[11px] font-medium tracking-wide">Users</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-[#107C41] transition-all cursor-pointer active:scale-90 duration-150">
+<span class="material-symbols-outlined mb-1">history</span>
+<span class="font-['Inter'] text-[11px] font-medium tracking-wide">History</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-[#107C41] transition-all cursor-pointer active:scale-90 duration-150">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-['Inter'] text-[11px] font-medium tracking-wide">Settings</span>
+</div>
+</nav>
+</body></html>
