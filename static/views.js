@@ -114,20 +114,77 @@ app.renderTasks = async function() {
           ${this.auditors.map(a=>`<option>${a.name}</option>`).join('')}
         </select>
       </div>
-      <div class="flex flex-col gap-1.5">
+      <div class="flex flex-col gap-1.5 relative" id="statusFilterWrapper">
         <label class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40 ml-1">Estado</label>
-        <select id="fStatus" class="bg-surface-container-lowest border-none rounded-xl py-2 px-4 text-sm font-semibold shadow-sm focus:ring-2 focus:ring-primary w-40" onchange="app.loadTasksView()">
-          <option value="">Todos</option>
-          <option>Pendiente</option><option>En Progreso</option><option>Completada</option><option>Bloqueada</option>
-        </select>
+        <button type="button" class="bg-surface-container-lowest border-none rounded-xl py-2 px-4 text-sm font-semibold shadow-sm focus:ring-2 focus:ring-primary w-40 text-left flex justify-between items-center" style="color: #002D72 !important;" onclick="document.getElementById('statusDropdown').classList.toggle('hidden'); event.stopPropagation();">
+          <span id="fStatusLabel" class="truncate pointer-events-none">Todos</span>
+          <span class="text-[10px] pointer-events-none">▼</span>
+        </button>
+        <div id="statusDropdown" class="hidden absolute top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-lg z-50 p-2 flex flex-col gap-1 border border-gray-200" onclick="event.stopPropagation()">
+          ${['Pendiente', 'En Progreso', 'Completada', 'Bloqueada'].map(s => `
+            <label class="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors m-0 text-sm font-semibold">
+              <input type="checkbox" class="status-cb w-4 h-4 rounded border-gray-300 focus:ring-[#F15A24] text-[#F15A24]" value="${s}" onchange="app.updateStatusFilter()">
+              <span class="select-none" style="color: #002D72 !important;">${s}</span>
+            </label>
+          `).join('')}
+        </div>
       </div>
     </div>
     <div id="tasksList" class="flex-1 w-full relative h-full"></div>`;
 
-  if (params.status) document.getElementById('fStatus').value = params.status;
+  if (!app._statusFilterInit) {
+    app._statusFilterInit = true;
+    document.addEventListener('click', () => {
+      const dd = document.getElementById('statusDropdown');
+      if (dd && !dd.classList.contains('hidden')) dd.classList.add('hidden');
+    });
+    app.updateStatusFilter = function(skipLoad = false) {
+      const checked = Array.from(document.querySelectorAll('.status-cb:checked')).map(cb => cb.value);
+      
+      document.querySelectorAll('.status-cb').forEach(cb => {
+         const label = cb.closest('label');
+         const span = label.querySelector('span');
+         if (cb.checked) {
+             label.style.backgroundColor = 'rgba(241, 90, 36, 0.1)';
+             span.style.fontWeight = '800';
+         } else {
+             label.style.backgroundColor = '';
+             span.style.fontWeight = '600';
+         }
+      });
+
+      const label = document.getElementById('fStatusLabel');
+      if (checked.length === 0) {
+        label.textContent = 'Todos';
+        app._statusFilterValues = '';
+      } else if (checked.length === 1) {
+        label.textContent = checked[0];
+        app._statusFilterValues = checked[0];
+      } else {
+        label.textContent = checked.length + ' seleccionados';
+        app._statusFilterValues = checked.join(',');
+      }
+      if (!skipLoad) app.loadTasksView();
+    };
+  }
+
+  if (params.status) {
+    const statuses = params.status.split(',');
+    document.querySelectorAll('.status-cb').forEach(cb => {
+      cb.checked = statuses.includes(cb.value);
+    });
+    app.updateStatusFilter(true);
+  } else {
+    document.querySelectorAll('.status-cb').forEach(cb => cb.checked = false);
+    app.updateStatusFilter(true);
+  }
+  
   if (params.responsible) document.getElementById('fResp').value = params.responsible;
   if (params.audit_id) document.getElementById('fAudit').value = params.audit_id;
-  if (params.overdue) document.getElementById('fStatus').value = '';
+  if (params.overdue) {
+    document.querySelectorAll('.status-cb').forEach(cb => cb.checked = false);
+    app.updateStatusFilter(true);
+  }
   this.loadTasksView(params.overdue === '1');
 };
 
@@ -135,7 +192,7 @@ app.loadTasksView = async function(overdueOnly = false) {
   let q = '/api/tasks?';
   const a = document.getElementById('fAudit')?.value;
   const r = document.getElementById('fResp')?.value;
-  const s = document.getElementById('fStatus')?.value;
+  const s = app._statusFilterValues || '';
   const c = this.navParams?.category;
   if (a === 'standalone') q += 'standalone=1&'; else if (a) q += `audit_id=${a}&`;
   if (r) q += `responsible=${encodeURIComponent(r)}&`;
@@ -1064,7 +1121,8 @@ app.removeCategory = async function(id) {
 // ── User Management (Ethereal Style) ──
 app.renderUsers = async function() {
   if (this.user?.role !== 'admin') return this.navigate('dashboard');
-  const users = await this.get('/api/users') || [];
+  this.users = await this.get('/api/users') || [];
+  const users = this.users;
   document.getElementById('headerActions').innerHTML = `
     <button class="btn btn-primary" onclick="app.showUserModal()">
       <span class="material-symbols-outlined text-lg">person_add</span> Nuevo Usuario
@@ -1093,7 +1151,7 @@ app.renderUsers = async function() {
             </div>
             <div class="flex items-center gap-2 mt-auto pt-4 border-t border-outline-variant">
               ${isLocked ? `<button class="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shadow-sm hover:opacity-90 transition-all" onclick="app.unlockUser('${u.username}')"><span class="material-symbols-outlined text-[20px]">lock_open</span></button>` : ''}
-              <button class="flex-1 bg-surface-container-low text-white font-bold py-3 rounded-2xl text-xs hover:bg-surface-container-high transition-colors" onclick="app.showEditUserModal('${u.username}','${u.full_name||''}','${u.role}','${u.area_id||''}')">Editar Perfil</button>
+              <button class="flex-1 bg-surface-container-low text-white font-bold py-3 rounded-2xl text-xs hover:bg-surface-container-high transition-colors" onclick="app.showEditUserModal('${u.username}')">Editar Perfil</button>
               ${u.username !== 'admin' ? `<button class="w-12 h-12 rounded-2xl bg-error-container/20 text-error flex items-center justify-center hover:bg-error-container/40 transition-colors" onclick="app.deleteUser('${u.username}')"><span class="material-symbols-outlined text-[20px]">delete</span></button>` : ''}
             </div>
           </div>`;
@@ -1105,6 +1163,8 @@ app.renderUsers = async function() {
 app.showUserModal = async function(u = null) {
   const isEdit = !!u;
   if (!this.areas || this.areas.length === 0) await this.loadAreas();
+  if (!this.auditors || this.auditors.length === 0) await this.loadMasterData();
+  const linkedAuditors = u?.linked_auditors || [];
   this.openModal(isEdit?'Editar Perfil':'Nuevo Usuario', `
     <div class="space-y-6">
       <div class="space-y-2">
@@ -1134,16 +1194,41 @@ app.showUserModal = async function(u = null) {
           ${(this.areas||[]).map(a=>`<option value="${a.id}" ${u?.area_id===a.id?'selected':''}>${a.name}</option>`).join('')}
         </select>
       </div>
+      <div class="space-y-2">
+        <label class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 ml-1">Auditores Vinculados (Datos Maestros)</label>
+        <div class="w-full bg-white border border-gray-200 rounded-2xl p-4 max-h-40 overflow-y-auto custom-scrollbar flex flex-col gap-2">
+          ${(this.auditors||[]).map(a => {
+            const isChecked = linkedAuditors.includes(a.name);
+            return `
+            <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg transition-colors" style="${isChecked ? 'background-color: rgba(241, 90, 36, 0.1);' : ''}">
+              <input type="checkbox" class="user-auditor-cb w-4 h-4 rounded-sm border-gray-300 text-[#F15A24] focus:ring-[#F15A24]" value="${a.name}" ${isChecked ? 'checked' : ''} onchange="
+                const lbl = this.closest('label');
+                const spn = lbl.querySelector('span');
+                if(this.checked) {
+                  lbl.style.backgroundColor = 'rgba(241, 90, 36, 0.1)';
+                  spn.style.fontWeight = '800';
+                } else {
+                  lbl.style.backgroundColor = 'transparent';
+                  spn.style.fontWeight = '600';
+                }
+              ">
+              <span class="text-sm select-none" style="color: #002D72 !important; font-weight: ${isChecked ? '800' : '600'};">${a.name}</span>
+            </label>
+          `}).join('')}
+        </div>
+      </div>
     </div>`,
     `<button class="bg-surface-container-highest/20 text-on-surface-variant font-bold px-6 py-3 rounded-2xl text-sm transition-all hover:bg-surface-container-highest/40" onclick="app.closeModal()">Cerrar</button>
      <button class="bg-primary text-white font-bold px-10 py-3 rounded-2xl text-sm shadow-ambient transition-all hover:opacity-90 active:scale-95" onclick="app.saveUser(${isEdit})">${isEdit?'Actualizar Usuario':'Habilitar Acceso'}</button>`);
 };
-app.showEditUserModal = function(username, fullName, role, areaId) { this.showUserModal({ username, full_name: fullName, role, area_id: areaId }); };
+app.showEditUserModal = function(username) { const u = this.users.find(x => x.username === username); this.showUserModal(u); };
 app.saveUser = async function(isEdit) {
   const username = document.getElementById('uName').value.trim(), password = document.getElementById('uPass').value;
   if (!username) return this.toast('Requerido', 'error');
   if (!isEdit && !password) return this.toast('Contraseña requerida', 'error');
-  const d = { username, full_name: document.getElementById('uFull').value, role: document.getElementById('uRole').value, area_id: document.getElementById('uArea').value };
+  
+  const linked_auditors = Array.from(document.querySelectorAll('.user-auditor-cb:checked')).map(cb => cb.value);
+  const d = { username, full_name: document.getElementById('uFull').value, role: document.getElementById('uRole').value, area_id: document.getElementById('uArea').value, linked_auditors };
   if (password) d.password = password;
   const r = isEdit ? await this.put(`/api/users/${username}`, d) : await this.post('/api/users', d);
   if (r?.status === 'success') { this.toast(isEdit?'Actualizado':'Creado'); this.closeModal(); this.renderUsers(); } else this.toast(r?.error||'Error', 'error');

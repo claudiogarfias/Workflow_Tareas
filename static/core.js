@@ -72,7 +72,7 @@ const app = {
     
     // Hide/Show Admin Menu (Papelera/Logs)
     const adminMenu = document.getElementById('adminMenu');
-    if (role === 'admin' || role === 'jefe' || role === 'auditor') {
+    if (role === 'admin' || role === 'jefe') {
       adminMenu.classList.remove('hidden');
       adminMenu.classList.add('flex');
     } else {
@@ -83,20 +83,56 @@ const app = {
     // Hide/Show User Management
     document.getElementById('navUserManagement').style.display = (role === 'admin') ? '' : 'none';
 
-    // Hide/Show Plantillas & Planes
+    // Hide/Show Plantillas, Planes & Datos Maestros
     const btnTemplates = document.querySelector('[data-view="templates"]');
     const btnPlans = document.querySelector('[data-view="plans"]');
+    const btnMaster = document.querySelector('[data-view="master"]');
+    
     if (btnTemplates) btnTemplates.style.display = (role === 'admin' || role === 'jefe') ? '' : 'none';
     if (btnPlans) btnPlans.style.display = (role === 'admin' || role === 'jefe') ? '' : 'none';
+    if (btnMaster) btnMaster.style.display = (role === 'admin' || role === 'jefe') ? '' : 'none';
 
     this.navigate('dashboard');
+  },
+  showProfileModal() {
+    const u = this.user;
+    const initials = (u.full_name || u.username).charAt(0).toUpperCase();
+    const linked = (u.linked_auditors || []).join(', ') || 'Ninguno';
+    const roleMap = { 'admin': 'Administrador', 'jefe': 'Jefe de Auditoría', 'gerente': 'Gerente', 'auditor': 'Auditor' };
+    
+    this.openModal('Perfil de Usuario', `
+      <div class="flex flex-col items-center mb-6">
+        <div class="w-24 h-24 rounded-[2rem] bg-primary flex items-center justify-center text-4xl font-headline font-extrabold text-white shadow-ambient mb-4">
+          ${initials}
+        </div>
+        <h2 class="text-2xl font-headline font-extrabold text-on-surface">${u.full_name || u.username}</h2>
+        <p class="text-sm font-bold text-on-surface-variant/60 uppercase tracking-widest mt-1">${roleMap[u.role] || u.role}</p>
+      </div>
+      
+      <div class="space-y-4">
+        <div class="bg-surface-container-low p-4 rounded-2xl flex justify-between items-center">
+          <span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">Usuario del Sistema</span>
+          <span class="text-sm font-bold text-on-surface">${u.username}</span>
+        </div>
+        <div class="bg-surface-container-low p-4 rounded-2xl flex flex-col gap-1">
+          <span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">Auditores Vinculados (Datos Maestros)</span>
+          <span class="text-sm font-bold text-on-surface">${linked}</span>
+        </div>
+      </div>
+      
+      <div class="mt-8">
+        <button class="w-full flex items-center justify-center gap-2 bg-surface-variant text-on-surface font-bold py-3 rounded-2xl transition-all hover:bg-surface-container-highest" onclick="app.showChangePasswordModal()">
+          <span class="material-symbols-outlined text-xl">password</span> Cambiar Contraseña
+        </button>
+      </div>
+    `, `<button class="w-full bg-primary text-white font-bold px-6 py-3 rounded-2xl text-sm shadow-ambient transition-all hover:opacity-90 active:scale-95" onclick="app.closeModal()">Cerrar</button>`);
   },
   showChangePasswordModal() {
     this.openModal('Cambiar Contraseña', `
       <div class="form-group"><label class="form-label">Actual</label><input type="password" class="form-input" id="cpOld"></div>
       <div class="form-group"><label class="form-label">Nueva</label><input type="password" class="form-input" id="cpNew"></div>
       <div class="form-group"><label class="form-label">Confirmar</label><input type="password" class="form-input" id="cpConfirm"></div>`,
-      `<button class="btn btn-secondary" onclick="app.closeModal()">Cancelar</button>
+      `<button class="btn btn-secondary" onclick="app.showProfileModal()">Volver</button>
        <button class="btn btn-primary" onclick="app.doChangePassword()">Guardar</button>`);
   },
   async doChangePassword() {

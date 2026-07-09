@@ -59,7 +59,7 @@ def get_calculated_status(c, audit_id, db_status):
 def get_user_from_request():
     return session.get('username', request.headers.get('X-User', 'Sistema'))
 
-def append_auth_filter(q, params, table_alias='', audit_id_column='id'):
+def append_auth_filter(q, params, table_alias='', audit_id_column='id', task_alias=None):
     role = session.get('role', 'auditor')
     if role in ('admin', 'gerente'):
         return q
@@ -70,9 +70,20 @@ def append_auth_filter(q, params, table_alias='', audit_id_column='id'):
         q += f" AND {prefix}{audit_id_column} IN (SELECT audit_id FROM audit_areas WHERE area_id IN (SELECT area_id FROM user_areas WHERE username=?))"
         params.append(username)
     elif role == 'auditor':
-        full_name = session.get('full_name')
-        q += f" AND {prefix}{audit_id_column} IN (SELECT audit_id FROM audit_tasks WHERE responsible=? AND deleted_at IS NULL)"
-        params.append(full_name)
+        linked = session.get('linked_auditors', [])
+        if not linked and session.get('full_name'):
+            linked = [session.get('full_name')]
+            
+        if linked:
+            placeholders = ','.join(['?']*len(linked))
+            cond = f"{prefix}{audit_id_column} IN (SELECT audit_id FROM audit_tasks WHERE responsible IN ({placeholders}) AND deleted_at IS NULL AND audit_id IS NOT NULL)"
+            params.extend(linked)
+            if task_alias:
+                cond = f"({cond} OR {task_alias}.responsible IN ({placeholders}))"
+                params.extend(linked)
+            q += f" AND {cond}"
+        else:
+            q += " AND 1=0"
     return q
 
 def get_current_user_role():
@@ -112,7 +123,8 @@ def init_db():
 
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY, password TEXT NOT NULL, full_name TEXT,
-        role TEXT DEFAULT 'auditor', status TEXT DEFAULT 'active', failed_attempts INTEGER DEFAULT 0
+        role TEXT DEFAULT 'auditor', status TEXT DEFAULT 'active', failed_attempts INTEGER DEFAULT 0,
+        linked_auditors TEXT DEFAULT '[]'
     )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS auditors (
@@ -192,6 +204,8 @@ def init_db():
     for col, dflt in [('weight','0.0'), ('template_id', "''")]:
         try: c.execute(f"ALTER TABLE template_tasks ADD COLUMN {col} TEXT DEFAULT {dflt}")
         except: pass
+    try: c.execute("ALTER TABLE users ADD COLUMN linked_auditors TEXT DEFAULT '[]'")
+    except: pass
 
     # Admin seed
     c.execute('SELECT COUNT(*) FROM users')
@@ -302,9 +316,13 @@ def login():
     session['username'] = username
     session['role'] = user['role']
     session['full_name'] = user['full_name']
+    try:
+        session['linked_auditors'] = json.loads(user['linked_auditors']) if user['linked_auditors'] else []
+    except:
+        session['linked_auditors'] = []
     session.permanent = True
     
-    return jsonify({"status":"success","username":username,"role":user['role'],"full_name":user['full_name']})
+    return jsonify({"status":"success","username":username,"role":user['role'],"full_name":user['full_name'],"linked_auditors":session['linked_auditors']})
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -317,7 +335,8 @@ def me():
     return jsonify({
         "username": session.get('username'),
         "role": session.get('role'),
-        "full_name": session.get('full_name')
+        "full_name": session.get('full_name'),
+        "linked_auditors": session.get('linked_auditors', [])
     })
 
 @app.route('/api/change-password', methods=['POST'])
@@ -335,11 +354,17 @@ def change_password():
 def get_users():
     conn = get_db(); c = conn.cursor()
     c.execute('''
-        SELECT u.username, u.full_name, u.role, u.status, u.failed_attempts, ua.area_id 
+        SELECT u.username, u.full_name, u.role, u.status, u.failed_attempts, u.linked_auditors, ua.area_id 
         FROM users u 
         LEFT JOIN user_areas ua ON u.username = ua.username
     ''')
-    r = [dict(x) for x in c.fetchall()]; conn.close(); return jsonify(r)
+    r = []
+    for x in c.fetchall():
+        d = dict(x)
+        try: d['linked_auditors'] = json.loads(d.get('linked_auditors', '[]')) if d.get('linked_auditors') else []
+        except: d['linked_auditors'] = []
+        r.append(d)
+    conn.close(); return jsonify(r)
 
 @app.route('/api/users', methods=['POST'])
 def create_user():
@@ -347,8 +372,9 @@ def create_user():
     if not p.get('username') or not p.get('password'): return jsonify({"error":"Requeridos"}), 400
     conn = get_db(); c = conn.cursor()
     try:
-        c.execute('INSERT INTO users (username,password,full_name,role,status) VALUES (?,?,?,?,?)',
-                  (p['username'], generate_password_hash(p['password']), p.get('full_name',''), p.get('role','auditor'), 'active'))
+        linked_auditors = json.dumps(p.get('linked_auditors', []))
+        c.execute('INSERT INTO users (username,password,full_name,role,status,linked_auditors) VALUES (?,?,?,?,?,?)',
+                  (p['username'], generate_password_hash(p['password']), p.get('full_name',''), p.get('role','auditor'), 'active', linked_auditors))
         if p.get('area_id'):
             c.execute('INSERT INTO user_areas (username, area_id) VALUES (?,?)', (p['username'], p['area_id']))
         conn.commit()
@@ -362,6 +388,7 @@ def update_user(username):
     if 'role' in p: c.execute('UPDATE users SET role=? WHERE username=?', (p['role'], username))
     if 'full_name' in p: c.execute('UPDATE users SET full_name=? WHERE username=?', (p['full_name'], username))
     if p.get('password'): c.execute('UPDATE users SET password=? WHERE username=?', (generate_password_hash(p['password']), username))
+    if 'linked_auditors' in p: c.execute('UPDATE users SET linked_auditors=? WHERE username=?', (json.dumps(p['linked_auditors']), username))
     
     if 'area_id' in p:
         c.execute('DELETE FROM user_areas WHERE username=?', (username,))
@@ -924,11 +951,15 @@ def get_tasks():
     q = 'SELECT t.*, a.name as audit_name FROM audit_tasks t LEFT JOIN audits a ON t.audit_id=a.id WHERE t.deleted_at IS NULL AND (t.audit_id IS NULL OR a.deleted_at IS NULL)'
     params = []
     
-    q = append_auth_filter(q, params, table_alias='a')
+    q = append_auth_filter(q, params, table_alias='a', task_alias='t')
     
     if audit_id: q += ' AND t.audit_id=?'; params.append(audit_id)
     if responsible: q += ' AND t.responsible=?'; params.append(responsible)
-    if status: q += ' AND t.status=?'; params.append(status)
+    if status:
+        status_list = [s.strip() for s in status.split(',')]
+        placeholders = ','.join(['?']*len(status_list))
+        q += f' AND t.status IN ({placeholders})'
+        params.extend(status_list)
     if category:
         if category == '__empty__': q += ' AND (t.category IS NULL OR t.category="")'
         else: q += ' AND (t.category=? OR a.name=?)'; params.extend([category, category])
@@ -981,7 +1012,7 @@ def update_task(tid):
     conn.commit(); conn.close(); return jsonify({"status":"success"})
 
 @app.route('/api/tasks/<tid>', methods=['DELETE'])
-@require_role('admin', 'auditor')
+@require_role('admin', 'gerente', 'jefe')
 def delete_task(tid):
     conn = get_db(); c = conn.cursor(); now = datetime.now().isoformat()
     c.execute('UPDATE audit_tasks SET deleted_at=? WHERE id=?', (now, tid))
@@ -1044,7 +1075,7 @@ def daily_tasks():
            WHERE t.deleted_at IS NULL AND (t.audit_id IS NULL OR a.deleted_at IS NULL) AND 
            ((t.due_date >= ? AND t.due_date <= ?) OR (t.due_date < ? AND t.due_date != '' AND t.status != 'Completada'))"""
     params = [start, end, start]
-    q = append_auth_filter(q, params, table_alias='a')
+    q = append_auth_filter(q, params, table_alias='a', task_alias='t')
     if responsible: q += ' AND t.responsible=?'; params.append(responsible)
     if audit_id:
         if audit_id == 'standalone': q += ' AND t.audit_id IS NULL'
@@ -1058,7 +1089,7 @@ def daily_tasks():
 def get_deviations():
     conn = get_db(); c = conn.cursor(); audit_id = request.args.get('audit_id')
     q = 'SELECT d.*, a.name as audit_name FROM deviations d LEFT JOIN audits a ON d.audit_id=a.id WHERE 1=1'; params = []
-    q = append_auth_filter(q, params, table_alias='a')
+    q = append_auth_filter(q, params, table_alias='a', task_alias='d')
     if audit_id: q += ' AND d.audit_id=?'; params.append(audit_id)
     q += ' ORDER BY d.created_at DESC'; c.execute(q, params); r = [dict(x) for x in c.fetchall()]; conn.close(); return jsonify(r)
 
@@ -1092,7 +1123,7 @@ def dashboard_summary():
     conn = get_db(); c = conn.cursor(); responsible = request.args.get('responsible'); today = today_str()
     base = 'FROM audit_tasks t WHERE t.deleted_at IS NULL AND (t.audit_id IS NULL OR t.audit_id NOT IN (SELECT id FROM audits WHERE deleted_at IS NOT NULL))'
     params = []
-    base = append_auth_filter(base, params, table_alias='t', audit_id_column='audit_id')
+    base = append_auth_filter(base, params, table_alias='t', audit_id_column='audit_id', task_alias='t')
     
     if responsible: base += ' AND t.responsible LIKE ?'; params.append(f'%{responsible}%')
     w = " AND"
@@ -1102,7 +1133,7 @@ def dashboard_summary():
     c.execute(f'SELECT COUNT(*) {base}{w} t.status="Pendiente"', params); pending = c.fetchone()[0]
     c.execute(f'SELECT COUNT(*) {base}{w} t.status!="Completada" AND t.due_date<? AND t.due_date!=""', params + [today]); overdue = c.fetchone()[0]
     db = 'FROM deviations d WHERE 1=1'; dp = []
-    db = append_auth_filter(db, dp, table_alias='d', audit_id_column='audit_id')
+    db = append_auth_filter(db, dp, table_alias='d', audit_id_column='audit_id', task_alias='d')
     if responsible: db += ' AND d.responsible LIKE ?'; dp.append(f'%{responsible}%')
     dw = " AND"
     c.execute(f'SELECT COUNT(*) {db}', dp); dev_total = c.fetchone()[0]
@@ -1141,7 +1172,7 @@ def dashboard_by_responsible():
     conn = get_db(); c = conn.cursor(); responsible = request.args.get('responsible'); today = today_str()
     w = 'WHERE t.responsible != "" AND t.deleted_at IS NULL AND (t.audit_id IS NULL OR t.audit_id NOT IN (SELECT id FROM audits WHERE deleted_at IS NOT NULL))'
     params = []
-    w = append_auth_filter(w, params, table_alias='t', audit_id_column='audit_id')
+    w = append_auth_filter(w, params, table_alias='t', audit_id_column='audit_id', task_alias='t')
     
     if responsible: w += ' AND t.responsible LIKE ?'; params.append(f'%{responsible}%')
     c.execute(f'''SELECT t.responsible, COUNT(*) as total,
@@ -1157,7 +1188,7 @@ def dashboard_by_category():
     conn = get_db(); c = conn.cursor(); responsible = request.args.get('responsible'); today = today_str()
     w = 'WHERE t.deleted_at IS NULL AND (t.audit_id IS NULL OR a.deleted_at IS NULL) AND t.status != "Completada"'
     params = []
-    w = append_auth_filter(w, params, table_alias='a')
+    w = append_auth_filter(w, params, table_alias='a', task_alias='t')
     if responsible: w += ' AND t.responsible LIKE ?'; params.append(f'%{responsible}%')
     c.execute(f'''SELECT COALESCE(a.name, NULLIF(t.category, ''), 'Libres (Sin Categoría)') as category, COUNT(*) as total,
         SUM(CASE WHEN t.status='En Progreso' THEN 1 ELSE 0 END) as in_progress,
@@ -1173,7 +1204,7 @@ def dashboard_overdue_deviation():
     today_s = today_str()
     w = 'WHERE t.deleted_at IS NULL AND t.status != "Completada" AND t.due_date < ? AND t.due_date != "" AND (t.audit_id IS NULL OR t.audit_id NOT IN (SELECT id FROM audits WHERE deleted_at IS NOT NULL))'
     params = [today_s]
-    w = append_auth_filter(w, params, table_alias='t', audit_id_column='audit_id')
+    w = append_auth_filter(w, params, table_alias='t', audit_id_column='audit_id', task_alias='t')
     if responsible: w += ' AND t.responsible LIKE ?'; params.append(f'%{responsible}%')
     
     c.execute(f'SELECT t.due_date, COUNT(*) as count FROM audit_tasks t {w} GROUP BY t.due_date', params)
@@ -1204,7 +1235,7 @@ def dashboard_by_status():
     conn = get_db(); c = conn.cursor(); responsible = request.args.get('responsible')
     w = 'WHERE t.deleted_at IS NULL AND (t.audit_id IS NULL OR t.audit_id NOT IN (SELECT id FROM audits WHERE deleted_at IS NOT NULL))'
     params = []
-    w = append_auth_filter(w, params, table_alias='t', audit_id_column='audit_id')
+    w = append_auth_filter(w, params, table_alias='t', audit_id_column='audit_id', task_alias='t')
     if responsible: w += ' AND t.responsible LIKE ?'; params.append(f'%{responsible}%')
     c.execute(f'SELECT t.status, COUNT(*) as count FROM audit_tasks t {w} GROUP BY t.status', params)
     r = [dict(x) for x in c.fetchall()]; conn.close(); return jsonify(r)
@@ -1223,6 +1254,7 @@ def auto_clean_recycle_bin(c):
     c.execute('DELETE FROM audit_tasks WHERE deleted_at IS NOT NULL AND deleted_at < ?', (thirty_days_ago,))
 
 @app.route('/api/recycle-bin', methods=['GET'])
+@require_role('admin', 'gerente', 'jefe')
 def get_recycle_bin():
     conn = get_db(); c = conn.cursor()
     auto_clean_recycle_bin(c)
@@ -1243,6 +1275,7 @@ def get_recycle_bin():
     return jsonify({"audits": audits, "tasks": tasks})
 
 @app.route('/api/recycle-bin/restore', methods=['POST'])
+@require_role('admin', 'gerente', 'jefe')
 def restore_recycled_item():
     p = request.json; conn = get_db(); c = conn.cursor()
     ent_type = p.get('type'); eid = p.get('id')
