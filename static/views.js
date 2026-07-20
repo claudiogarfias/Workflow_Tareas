@@ -175,7 +175,9 @@ app.renderTasks = async function() {
     });
     app.updateStatusFilter(true);
   } else {
-    document.querySelectorAll('.status-cb').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.status-cb').forEach(cb => {
+      cb.checked = ['Pendiente', 'En Progreso'].includes(cb.value);
+    });
     app.updateStatusFilter(true);
   }
   
