@@ -2600,7 +2600,7 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
         </div>
         
         <div class="space-y-4 mb-8">
-          <h4 class="text-lg font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined">mark_email_unread</span> Plantilla de Correo</h4>
+          <h4 class="text-lg font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined">mark_email_unread</span> Plantilla de Correo de Envío</h4>
           <div class="bg-surface-variant/30 p-4 rounded-xl text-xs text-white/70 mb-4 border border-outline-variant/30">
             <strong>Variables dinámicas permitidas:</strong><br>
             <code class="text-primary bg-primary/10 px-1 rounded">{{audit_name}}</code> : Nombre de la Auditoría<br>
@@ -2614,6 +2614,39 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
           <div class="form-group">
             <label class="form-label text-white/80">Cuerpo del Correo</label>
             <textarea id="emailBody" class="form-input bg-surface-container-lowest min-h-[150px] font-mono text-sm">${s.survey_email_body || ''}</textarea>
+          </div>
+        </div>
+
+        <div class="space-y-4 mb-8 border-t border-outline-variant/30 pt-6">
+          <h4 class="text-lg font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined">notifications_active</span> Notificación de Encuestas Respondidas</h4>
+          <div class="bg-surface-variant/30 p-4 rounded-xl text-xs text-white/70 mb-4 border border-outline-variant/30">
+            Configura los correos que recibirán automáticamente una notificación con el <strong>% de satisfacción</strong> y el <strong>informe PDF adjunto</strong> en cuanto un auditado responda una encuesta.
+          </div>
+          <div class="flex items-center gap-3 mb-4">
+            <input type="checkbox" id="notifyEnabled" class="w-5 h-5 accent-primary rounded cursor-pointer" ${s.survey_notify_enabled === 'true' || s.survey_notify_enabled === '1' || s.survey_notify_enabled === true ? 'checked' : ''}>
+            <label for="notifyEnabled" class="text-sm font-bold text-white cursor-pointer">Activar envío automático de notificaciones al responder encuestas</label>
+          </div>
+          <div class="form-group">
+            <label class="form-label text-white/80">Correos Notificados (separados por coma)</label>
+            <input type="text" id="notifyEmails" class="form-input bg-surface-container-lowest" value="${s.survey_notify_emails || ''}" placeholder="ej: controlgestion@empresa.cl, jefatura@empresa.cl">
+          </div>
+
+          <div class="space-y-4 mt-6">
+            <h5 class="text-sm font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">badge</span> Plantilla del Correo de Notificación</h5>
+            <div class="bg-surface-variant/30 p-4 rounded-xl text-xs text-white/70 mb-4 border border-outline-variant/30">
+              <strong>Variables dinámicas permitidas:</strong><br>
+              <code class="text-primary bg-primary/10 px-1 rounded">{{audit_name}}</code> : Nombre de la Auditoría<br>
+              <code class="text-primary bg-primary/10 px-1 rounded">{{evaluator_name}}</code> : Nombre del Evaluador<br>
+              <code class="text-primary bg-primary/10 px-1 rounded">{{score_pct}}</code> : % de Satisfacción Obtenido
+            </div>
+            <div class="form-group">
+              <label class="form-label text-white/80">Asunto del Correo de Notificación</label>
+              <input type="text" id="notifySubject" class="form-input bg-surface-container-lowest" value="${s.survey_notify_subject || '[Notificación] Encuesta Respondida: {{audit_name}} - {{score_pct}}% Satisfacción'}">
+            </div>
+            <div class="form-group">
+              <label class="form-label text-white/80">Cuerpo del Correo de Notificación</label>
+              <textarea id="notifyBody" class="form-input bg-surface-container-lowest min-h-[120px] font-mono text-sm">${s.survey_notify_body || 'Estimados,\n\nSe ha recibido la respuesta a la Encuesta de Satisfacción para la auditoría \'{{audit_name}}\'.\n\nEvaluador: {{evaluator_name}}\n% de Satisfacción Alcanzado: {{score_pct}}%\n\nSe adjunta el reporte detallado en formato PDF.\n\nSaludos,\nSistema de Auditoría Interna'}</textarea>
+            </div>
           </div>
         </div>
         
@@ -2634,7 +2667,11 @@ app.saveSurveyConfig = async function() {
     smtp_user: document.getElementById('smtpUser').value.trim(),
     smtp_pass: document.getElementById('smtpPass').value.trim(),
     survey_email_subject: document.getElementById('emailSubject').value.trim(),
-    survey_email_body: document.getElementById('emailBody').value.trim()
+    survey_email_body: document.getElementById('emailBody').value.trim(),
+    survey_notify_enabled: document.getElementById('notifyEnabled').checked ? 'true' : 'false',
+    survey_notify_emails: document.getElementById('notifyEmails').value.trim(),
+    survey_notify_subject: document.getElementById('notifySubject').value.trim(),
+    survey_notify_body: document.getElementById('notifyBody').value.trim()
   };
   const res = await this.post('/api/settings/survey', payload);
   if (res && res.status === 'success') {

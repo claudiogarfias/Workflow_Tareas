@@ -1040,6 +1040,49 @@ def restore_template(aid):
     if not audit or not audit['template_id']:
         conn.close(); return jsonify({"error":"La auditoría no tiene plantilla asociada"}), 400
 
+    audit_dict = dict(audit)
+    audit_resp = audit_dict.get('responsible', '')
+    auditors_list = []
+    try:
+        val = audit_dict.get('auditors')
+        auditors_list = json.loads(val) if val else []
+    except:
+        pass
+    if not auditors_list and audit_resp:
+        auditors_list = [audit_resp]
+    assigned_resp = auditors_list[0] if auditors_list else ''
+    
+    try:
+        c.execute('''
+            SELECT s.name as stage_name, t.name, t.description, t.weight, t.order_num
+            FROM template_tasks t 
+            JOIN template_stages s ON t.stage_id = s.id
+            WHERE s.template_id=? 
+            ORDER BY s.order_num ASC, t.order_num ASC
+        ''', (audit['template_id'],))
+        template_tasks = c.fetchall()
+        
+        c.execute('SELECT name FROM audit_tasks WHERE audit_id=? AND deleted_at IS NULL', (aid,))
+        existing_tasks = {row['name'] for row in c.fetchall()}
+        
+        now = datetime.now().isoformat()
+        restored = 0
+        for tk in template_tasks:
+            if tk['name'] not in existing_tasks:
+                c.execute('SELECT id FROM audit_tasks WHERE audit_id=? AND name=? AND deleted_at IS NOT NULL ORDER BY weight DESC, deleted_at ASC LIMIT 1', (aid, tk['name']))
+                deleted = c.fetchone()
+                if deleted:
+                    c.execute('UPDATE audit_tasks SET deleted_at=NULL, updated_at=?, weight=? WHERE id=?', (now, tk['weight'], deleted['id']))
+                else:
+                    c.execute('INSERT INTO audit_tasks (id,audit_id,name,description,category,responsible,status,priority,order_num,created_at,updated_at,weight) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                              (gen_id(), aid, tk['name'], tk['description'], tk['stage_name'], assigned_resp, 'Pendiente', 'Media', tk['order_num'], now, now, tk['weight']))
+                restored += 1
+                
+        log_activity(c, 'RESTAURAR PLANTILLA', 'Auditoría', aid, f"{restored} tareas restauradas")
+        conn.commit(); conn.close(); return jsonify({"status":"success", "restored": restored})
+    except Exception as e:
+        conn.close(); return jsonify({"error": str(e)}), 500
+
 # ─── AUDIT ATTACHMENTS ────────────────────────────────────────────────────────
 
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', '7z', 'rar', 'txt', 'csv'}
@@ -1125,46 +1168,6 @@ def download_attachment(att_id):
         return "Adjunto no encontrado", 404
         
     return send_from_directory(app.config['UPLOAD_FOLDER'], att['filepath'], as_attachment=True, download_name=att['filename'])
-        
-    audit_dict = dict(audit)
-    audit_resp = audit_dict.get('responsible', '')
-    auditors_list = []
-    try:
-        val = audit_dict.get('auditors')
-        auditors_list = json.loads(val) if val else []
-    except:
-        pass
-    if not auditors_list and audit_resp:
-        auditors_list = [audit_resp]
-    assigned_resp = auditors_list[0] if auditors_list else ''
-    
-    try:
-        c.execute('''
-            SELECT s.name as stage_name, t.name, t.description, t.weight, t.order_num
-            FROM template_tasks t 
-            JOIN template_stages s ON t.stage_id = s.id
-            WHERE s.template_id=? 
-            ORDER BY s.order_num ASC, t.order_num ASC
-        ''', (audit['template_id'],))
-        template_tasks = c.fetchall()
-        
-        c.execute('SELECT name FROM audit_tasks WHERE audit_id=? AND deleted_at IS NULL', (aid,))
-        existing_tasks = {row['name'] for row in c.fetchall()}
-        
-        now = datetime.now().isoformat()
-        restored = 0
-        for tk in template_tasks:
-            if tk['name'] not in existing_tasks:
-                c.execute('INSERT INTO audit_tasks (id,audit_id,name,description,category,responsible,status,priority,order_num,created_at,updated_at,weight) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-                          (gen_id(), aid, tk['name'], tk['description'], tk['stage_name'], assigned_resp, 'Pendiente', 'Media', tk['order_num'], now, now, tk['weight']))
-                restored += 1
-                
-        log_activity(c, 'RESTAURAR PLANTILLA', 'Auditoría', aid, f"{restored} tareas restauradas")
-        conn.commit(); conn.close(); return jsonify({"status":"success", "restored": restored})
-    except Exception as e:
-        conn.close(); return jsonify({"error": str(e)}), 500
-
-
 # ─── TASKS ───────────────────────────────────────────────────────────────────
 
 @app.route('/api/debug/counts', methods=['GET'])
@@ -1550,8 +1553,154 @@ def get_activity_logs():
 # ─── SATISFACTION SURVEYS (V2.0) ─────────────────────────────────────────────
 
 import smtplib
+import io
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+
+def generate_survey_pdf(audit_name, evaluator_name, evaluator_role, sat_pct, questions_data, responded_at):
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+        story = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('DocTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#002D72'), spaceAfter=6)
+        sub_style = ParagraphStyle('DocSub', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#475569'), spaceAfter=12)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#1e293b'))
+        cell_bold = ParagraphStyle('CellB', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', textColor=colors.HexColor('#002D72'))
+        
+        story.append(Paragraph("Informe de Resultados - Encuesta de Satisfacción", title_style))
+        date_str = str(responded_at)[:10] if responded_at else datetime.now().strftime('%Y-%m-%d')
+        story.append(Paragraph(f"<b>Auditoría:</b> {audit_name}<br/><b>Evaluador:</b> {evaluator_name} ({evaluator_role})<br/><b>Fecha de Respuesta:</b> {date_str}", sub_style))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#cbd5e1'), spaceAfter=12))
+        
+        color_hex = '#16a34a' if sat_pct >= 75 else ('#ca8a04' if sat_pct >= 50 else '#dc2626')
+        story.append(Paragraph(f"<b>% DE SATISFACCIÓN GLOBAL: <font color='{color_hex}'>{sat_pct:.1f}%</font></b>", ParagraphStyle('Score', parent=styles['Heading2'], fontSize=15, spaceAfter=14)))
+        
+        table_data = [[Paragraph('<b>Pregunta</b>', cell_bold), Paragraph('<b>Puntaje (0-4)</b>', cell_bold), Paragraph('<b>% Sat.</b>', cell_bold), Paragraph('<b>Comentarios / Justificación</b>', cell_bold)]]
+        
+        for q in questions_data:
+            q_text = q.get('question_text', '')
+            score = q.get('score')
+            score_val = score if score is not None else 0
+            pct = (score_val / 4.0 * 100) if score is not None else 0
+            comment = q.get('comment', '') or '-'
+            table_data.append([
+                Paragraph(q_text, cell_style),
+                Paragraph(str(score_val), cell_style),
+                Paragraph(f"{pct:.0f}%", cell_style),
+                Paragraph(comment, cell_style)
+            ])
+            
+        t = Table(table_data, colWidths=[200, 60, 60, 220])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f1f5f9')),
+            ('ALIGN', (1,0), (2,-1), 'CENTER'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ]))
+        story.append(t)
+        
+        doc.build(story)
+        pdf_data = buffer.getvalue()
+        buffer.close()
+        return pdf_data
+    except Exception as e:
+        print(f"[PDF ERROR] No se pudo generar PDF: {e}")
+        return None
+
+def send_survey_completion_notification(dispatch_id):
+    conn = get_db(); c = conn.cursor()
+    c.execute("SELECT key, value FROM global_settings")
+    settings = {row['key']: row['value'] for row in c.fetchall()}
+    
+    enabled = settings.get('survey_notify_enabled', 'false')
+    emails_str = settings.get('survey_notify_emails', '')
+    if enabled not in ('true', '1', True) or not emails_str:
+        conn.close(); return
+        
+    recipients = [e.strip() for e in emails_str.split(',') if e.strip()]
+    if not recipients:
+        conn.close(); return
+        
+    c.execute('SELECT * FROM survey_dispatches WHERE id=?', (dispatch_id,))
+    dispatch = c.fetchone()
+    if not dispatch:
+        conn.close(); return
+        
+    c.execute('SELECT name FROM audits WHERE id=?', (dispatch['audit_id'],))
+    audit_row = c.fetchone()
+    audit_name = audit_row['name'] if audit_row else 'Auditoría'
+    
+    c.execute('SELECT name, role_title FROM audit_stakeholders WHERE id=?', (dispatch['stakeholder_id'],))
+    stk = c.fetchone()
+    evaluator_name = stk['name'] if stk else 'Auditado'
+    evaluator_role = stk['role_title'] if stk else 'Auditado'
+    
+    c.execute('''
+        SELECT q.question_text, r.score, r.comment
+        FROM survey_responses r
+        JOIN survey_questions q ON r.question_id = q.id
+        WHERE r.dispatch_id = ?
+        ORDER BY q.order_num
+    ''', (dispatch_id,))
+    responses = [dict(r) for r in c.fetchall()]
+    conn.close()
+    
+    if not responses:
+        return
+        
+    scores = [r['score'] for r in responses if r['score'] is not None]
+    avg_pct = ((sum(scores) / (len(scores) * 4)) * 100) if scores else 0.0
+    
+    subject_template = settings.get('survey_notify_subject', '[Notificación] Encuesta Respondida: {{audit_name}} - {{score_pct}}% Satisfacción')
+    body_template = settings.get('survey_notify_body', "Estimados,\n\nSe ha recibido la respuesta a la Encuesta de Satisfacción para la auditoría '{{audit_name}}'.\n\nEvaluador: {{evaluator_name}}\n% de Satisfacción Alcanzado: {{score_pct}}%\n\nSe adjunta el reporte detallado en formato PDF.\n\nSaludos,\nSistema de Auditoría Interna")
+    
+    subject = subject_template.replace('{{audit_name}}', audit_name).replace('{{evaluator_name}}', evaluator_name).replace('{{score_pct}}', f"{avg_pct:.1f}")
+    body_text = body_template.replace('{{audit_name}}', audit_name).replace('{{evaluator_name}}', evaluator_name).replace('{{score_pct}}', f"{avg_pct:.1f}")
+    
+    pdf_bytes = generate_survey_pdf(audit_name, evaluator_name, evaluator_role, avg_pct, responses, dispatch['responded_at'] or datetime.now().isoformat())
+    
+    smtp_host = settings.get('smtp_host', '')
+    smtp_port = settings.get('smtp_port', '587')
+    smtp_user = settings.get('smtp_user', '')
+    smtp_pass = settings.get('smtp_pass', '')
+    
+    for to_email in recipients:
+        if not smtp_host or not smtp_user or not smtp_pass:
+            print(f"\n[NOTIFICACIÓN SIMULADA - CONTROL DE GESTIÓN] Para: {to_email}")
+            print(f"Asunto: {subject}")
+            print(f"Sat %: {avg_pct:.1f}% | PDF adjunto generado: {len(pdf_bytes) if pdf_bytes else 0} bytes\n")
+            continue
+            
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = smtp_user
+            msg['To'] = to_email
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body_text, 'plain'))
+            
+            if pdf_bytes:
+                part = MIMEApplication(pdf_bytes, Name=f"Reporte_Encuesta.pdf")
+                part['Content-Disposition'] = f'attachment; filename="Reporte_Encuesta.pdf"'
+                msg.attach(part)
+                
+            server = smtplib.SMTP(smtp_host, int(smtp_port))
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+            server.quit()
+            print(f"[NOTIFICACIÓN CORREO REAL] Enviada a {to_email}")
+        except Exception as e:
+            print(f"[ERROR NOTIFICACIÓN SMTP] {to_email}: {e}")
 
 def send_survey_email(to_email, name, audit_name, token):
     app_url = f"http://localhost:5001/static/survey_fill.html?token={token}"
@@ -1815,7 +1964,14 @@ def submit_public_survey(token):
                   (gen_id(), d['id'], resp['question_id'], resp.get('score'), resp.get('comment', ''), now))
         
     c.execute("UPDATE survey_dispatches SET status='Respondida', responded_at=? WHERE id=?", (now, d['id']))
-    conn.commit(); conn.close(); return jsonify({"status": "success"})
+    conn.commit(); conn.close()
+    
+    try:
+        send_survey_completion_notification(d['id'])
+    except Exception as e:
+        print(f"[ERROR NOTIFICACION COMPLETADA] {e}")
+        
+    return jsonify({"status": "success"})
 
 @app.route('/api/surveys/dashboard', methods=['GET'])
 @login_required
