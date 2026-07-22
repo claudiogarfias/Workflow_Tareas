@@ -37,10 +37,20 @@ const app = {
   },
 
   // ── Modal ──
-  openModal(title, bodyHTML, footerHTML = '') {
+  openModal(title, bodyHTML, footerHTML = '', isFullscreen = false) {
     document.getElementById('modalTitle').textContent = title;
     document.getElementById('modalBody').innerHTML = bodyHTML;
     document.getElementById('modalFooter').innerHTML = footerHTML;
+    
+    const modalEl = document.getElementById('modal');
+    if (isFullscreen) {
+      modalEl.classList.remove('max-w-2xl', 'max-h-[90vh]');
+      modalEl.classList.add('w-[95vw]', 'h-[95vh]', 'max-h-[95vh]');
+    } else {
+      modalEl.classList.add('max-w-2xl', 'max-h-[90vh]');
+      modalEl.classList.remove('w-[95vw]', 'h-[95vh]', 'max-h-[95vh]');
+    }
+    
     const ov = document.getElementById('modalOverlay');
     if(ov) ov.classList.remove('hidden');
   },
@@ -83,14 +93,15 @@ const app = {
     // Hide/Show User Management
     document.getElementById('navUserManagement').style.display = (role === 'admin') ? '' : 'none';
 
-    // Hide/Show Plantillas, Planes & Datos Maestros
     const btnTemplates = document.querySelector('[data-view="templates"]');
     const btnPlans = document.querySelector('[data-view="plans"]');
     const btnMaster = document.querySelector('[data-view="master"]');
+    const btnSurveys = document.querySelector('[data-view="surveys"]');
     
     if (btnTemplates) btnTemplates.style.display = (role === 'admin' || role === 'jefe') ? '' : 'none';
     if (btnPlans) btnPlans.style.display = (role === 'admin' || role === 'jefe') ? '' : 'none';
     if (btnMaster) btnMaster.style.display = (role === 'admin' || role === 'jefe') ? '' : 'none';
+    if (btnSurveys) btnSurveys.style.display = ['admin', 'jefe', 'gerente'].includes(role) ? '' : 'none';
 
     this.navigate('dashboard');
   },
@@ -174,6 +185,7 @@ const app = {
       deviations: () => this.renderDeviations(), templates: () => this.renderTemplates(),
       plans: () => this.renderPlans(), planner: () => this.renderPlanner(),
       master: () => this.renderMasterData(),
+      surveys: () => this.renderSurveysModule(),
       users: () => this.renderUsers(),
       logs: () => this.loadLogsView(),
       recycle: () => this.loadRecycleView()
@@ -868,6 +880,7 @@ const app = {
             </div>
             ${tasksHtml}
           </div>
+          <div id="auditSurveyContainer" class="w-full"></div>
         </div>
         
         <aside class="w-full lg:w-80 shrink-0 flex flex-col gap-6">
@@ -909,25 +922,25 @@ const app = {
           <div class="bg-surface-container-lowest p-5 rounded-2xl border border-surface-container shadow-sm">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-semibold text-on-surface text-sm flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">attach_file</span> Adjuntos</h3>
-              <button class="btn-icon" onclick="app.toast('Sube un archivo','info')" title="Subir nuevo"><span class="material-symbols-outlined text-[18px]">upload</span></button>
+              ${!isReadonly ? `
+              <button class="btn-icon" onclick="document.getElementById('auditFileInput_${id}').click()" title="Subir nuevo"><span class="material-symbols-outlined text-[18px]">upload</span></button>
+              <input type="file" id="auditFileInput_${id}" style="display:none" onchange="app.uploadAuditAttachment('${id}', this)">
+              ` : ''}
             </div>
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer border border-transparent hover:border-surface-container group">
-                <div class="w-8 h-8 rounded bg-red-100 text-red-600 flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[16px]">picture_as_pdf</span></div>
-                <div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-on-surface truncate group-hover:text-primary transition-colors">Informe_Preliminar.pdf</p><p class="text-[11px] text-on-surface-variant">Hace 2 horas</p></div>
-              </div>
-              <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer border border-transparent hover:border-surface-container group">
-                <div class="w-8 h-8 rounded bg-green-100 text-green-700 flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[16px]">table_chart</span></div>
-                <div class="min-w-0 flex-1"><p class="text-[13px] font-medium text-on-surface truncate group-hover:text-primary transition-colors">Matriz_Riesgos_2026.xlsx</p><p class="text-[11px] text-on-surface-variant">Ayer · 850 KB</p></div>
-              </div>
-              <button class="w-full mt-2 py-2.5 border-2 border-dashed border-outline-variant/60 rounded-xl text-xs font-semibold text-on-surface-variant hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2" onclick="app.toast('Subida simulada')">
-                <span class="material-symbols-outlined text-[16px]">add</span> Añadir archivo
-              </button>
+            <div id="auditAttachmentsContainer_${id}" class="flex flex-col gap-2">
+              <div class="flex justify-center p-4"><div class="spinner border-primary w-6 h-6"></div></div>
             </div>
+            ${!isReadonly ? `
+            <button class="w-full mt-2 py-2.5 border-2 border-dashed border-outline-variant/60 rounded-xl text-xs font-semibold text-on-surface-variant hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2" onclick="document.getElementById('auditFileInput_${id}').click()">
+              <span class="material-symbols-outlined text-[16px]">add</span> Añadir archivo
+            </button>
+            ` : ''}
           </div>
         </aside>
       </div>`;
     this.initResizableColumns();
+    if (app.loadAuditSurveySection) app.loadAuditSurveySection(id, isReadonly);
+    this.loadAuditAttachments(id, isReadonly);
   },
 
   async deleteStage(sid, aid) {
@@ -966,6 +979,93 @@ const app = {
         e.preventDefault();
       });
     });
+  },
+
+  async loadAuditAttachments(aid, isReadonly) {
+    const container = document.getElementById(`auditAttachmentsContainer_${aid}`);
+    if (!container) return;
+    try {
+      const attachments = await this.get(`/api/audits/${aid}/attachments`) || [];
+      if (attachments.length === 0) {
+        container.innerHTML = `<div class="text-center p-4 text-sm text-on-surface-variant font-medium">No hay archivos adjuntos</div>`;
+        return;
+      }
+      
+      const getIcon = (filename) => {
+        const ext = filename.split('.').pop().toLowerCase();
+        if (['pdf'].includes(ext)) return { icon: 'picture_as_pdf', bg: 'bg-red-100', text: 'text-red-600' };
+        if (['xls', 'xlsx', 'csv'].includes(ext)) return { icon: 'table_chart', bg: 'bg-green-100', text: 'text-green-700' };
+        if (['doc', 'docx', 'txt'].includes(ext)) return { icon: 'description', bg: 'bg-blue-100', text: 'text-blue-600' };
+        if (['zip', 'rar', '7z'].includes(ext)) return { icon: 'folder_zip', bg: 'bg-orange-100', text: 'text-orange-600' };
+        return { icon: 'insert_drive_file', bg: 'bg-surface-container-high', text: 'text-on-surface' };
+      };
+      
+      const formatSize = (bytes) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+      };
+      
+      container.innerHTML = attachments.map(att => {
+        const style = getIcon(att.filename);
+        return `
+          <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-low transition-colors border border-transparent hover:border-surface-container group">
+            <a href="/api/attachments/${att.id}/download" target="_blank" class="w-8 h-8 rounded ${style.bg} ${style.text} flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity">
+              <span class="material-symbols-outlined text-[16px]">${style.icon}</span>
+            </a>
+            <div class="min-w-0 flex-1 cursor-pointer" onclick="window.open('/api/attachments/${att.id}/download', '_blank')">
+              <p class="text-[13px] font-medium text-on-surface truncate group-hover:text-primary transition-colors" title="${att.filename}">${att.filename}</p>
+              <p class="text-[11px] text-on-surface-variant">${this.fmtDate(att.uploaded_at)} · ${formatSize(att.size)}</p>
+            </div>
+            ${!isReadonly ? `
+            <button class="btn-icon text-on-surface-variant/50 hover:text-error opacity-0 group-hover:opacity-100 transition-all shrink-0" onclick="app.deleteAuditAttachment('${att.id}', '${aid}', ${isReadonly})" title="Eliminar">
+              <span class="material-symbols-outlined text-[18px]">delete</span>
+            </button>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      container.innerHTML = `<div class="text-center p-4 text-sm text-error font-medium">Error al cargar</div>`;
+    }
+  },
+  
+  async uploadAuditAttachment(aid, input) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    this.toast('Subiendo archivo...', 'info');
+    input.value = ''; // Reset input
+    
+    try {
+      const res = await fetch(`/api/audits/${aid}/attachments`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al subir');
+      this.toast('Archivo subido');
+      
+      const readonly = this.user?.role === 'observador' || document.getElementById(`auditFileInput_${aid}`) === null;
+      this.loadAuditAttachments(aid, readonly);
+    } catch (e) {
+      this.toast(e.message, 'error');
+    }
+  },
+  
+  async deleteAuditAttachment(att_id, aid, isReadonly) {
+    if (!confirm('¿Eliminar este archivo permanentemente?')) return;
+    try {
+      await this.del(`/api/attachments/${att_id}`);
+      this.toast('Archivo eliminado');
+      this.loadAuditAttachments(aid, isReadonly);
+    } catch (e) {
+      this.toast(e.message, 'error');
+    }
   },
 
   // Init

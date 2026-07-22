@@ -576,8 +576,8 @@ app.renderTemplates = async function() {
   this.templates = await this.get('/api/templates') || [];
   const isR = this.user?.role === 'observador';
   if (!isR) document.getElementById('headerActions').innerHTML = `
-    <button class="btn btn-primary" onclick="app.showTemplateModal()">
-      <span class="material-symbols-outlined text-lg">add</span> Nueva Plantilla
+    <button class="bg-primary text-white font-bold px-6 py-2 rounded-xl text-sm hover:opacity-90 transition-all shadow-sm flex items-center gap-2" onclick="app.renderAuditTemplateBuilder()">
+      <span class="material-symbols-outlined text-[18px]">add</span> Nueva Plantilla
     </button>`;
   const body = document.getElementById('pageBody');
   if (this.templates.length === 0) { 
@@ -585,7 +585,7 @@ app.renderTemplates = async function() {
   }
   body.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">${this.templates.map(t => {
     const tc = (t.stages || []).reduce((s,st) => s + (st.tasks?.length||0), 0);
-    return `<div class="bg-surface-container-lowest p-8 rounded-[2.5rem] shadow-ambient transition-all hover:scale-[1.01] cursor-pointer group flex flex-col gap-6" onclick="app.showTemplateDetail('${t.id}')">
+    return `<div class="bg-surface-container-lowest p-8 rounded-[2.5rem] shadow-ambient transition-all hover:scale-[1.01] cursor-pointer group flex flex-col gap-6" onclick="app.renderAuditTemplateBuilder('${t.id}')">
       <div class="flex justify-between items-start">
         <div class="w-14 h-14 rounded-3xl bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
           <span class="material-symbols-outlined text-2xl">description</span>
@@ -614,122 +614,264 @@ app.renderTemplates = async function() {
   }).join('')}</div>`;
 };
 
-app.showTemplateModal = function(tmpl = null) {
-  const isEdit = !!tmpl;
-  let stagesHTML = '';
-  (tmpl?.stages || [{ name: '', tasks: [{ name: '' }] }]).forEach((s, si) => {
-    let tasks = (s.tasks || []).map((t) => `<div class="form-group tmpl-task-row" style="padding-left:24px;display:flex;gap:8px;align-items:center">
-      <input class="form-input tmpl-task" placeholder="Tarea" value="${t.name||''}">
-      <input type="number" class="form-input tmpl-task-weight" style="width:80px" placeholder="%" value="${t.weight||0}" min="0" max="100" step="0.5" onchange="app.updateTemplateWeightSum()">
-      <div class="flex items-center bg-surface-variant/20 rounded border border-outline-variant/30">
-        <button class="px-2 py-1 text-on-surface-variant/60 hover:text-primary hover:bg-surface-variant/50 transition-colors rounded-l" title="Subir" onclick="app.moveTaskUp(this)"><span class="material-symbols-outlined text-[14px]">arrow_upward</span></button>
-        <button class="px-2 py-1 text-on-surface-variant/60 hover:text-primary hover:bg-surface-variant/50 transition-colors border-l border-r border-outline-variant/30" title="Bajar" onclick="app.moveTaskDown(this)"><span class="material-symbols-outlined text-[14px]">arrow_downward</span></button>
-        <button class="px-2 py-1 text-error/70 hover:text-error hover:bg-error-container/50 transition-colors rounded-r" title="Eliminar" onclick="this.closest('.tmpl-task-row').remove();app.updateTemplateWeightSum()"><span class="material-symbols-outlined text-[14px]">close</span></button>
-      </div>
-    </div>`).join('');
-    stagesHTML += `<div class="stage-block" style="border:1px solid var(--border-color);border-radius:12px;padding:16px;margin-bottom:12px">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input class="form-input tmpl-stage" placeholder="Etapa" value="${s.name||''}"><button class="btn btn-xs btn-danger" onclick="this.closest('.stage-block').remove();app.updateTemplateWeightSum()">✕</button></div>
-      <div class="tasks-container">${tasks}</div>
-      <button class="btn btn-xs btn-secondary" onclick="app.addTemplateTask(this,${si})">+ Tarea</button></div>`;
-  });
-  
-  this.openModal(isEdit?'Editar Plantilla':'Nueva Plantilla', `
-    <div class="form-group"><label class="form-label">Nombre *</label><input class="form-input" id="tmplName" value="${tmpl?.name||''}"></div>
-    <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-textarea" id="tmplDesc">${tmpl?.description||''}</textarea></div>
-    <label class="form-label">Etapas y Tareas</label><div id="stagesContainer">${stagesHTML}</div>
-    <div class="flex justify-between items-center mt-md">
-      <button class="btn btn-sm btn-secondary" onclick="app.addTemplateStage()">+ Etapa</button>
-      <div class="text-sm font-semibold">Suma Total: <span id="tmplWeightSum" class="text-red-600 font-bold">0%</span></div>
-    </div>`,
-    `<button class="btn btn-secondary" onclick="app.closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="app.saveTemplate('${tmpl?.id||''}')">${isEdit?'Guardar':'Crear'}</button>`);
-  app.updateTemplateWeightSum();
-};
-
-app.updateTemplateWeightSum = function() {
-  let sum = 0;
-  document.querySelectorAll('.tmpl-task-weight').forEach(input => {
-    sum += parseFloat(input.value) || 0;
-  });
-  const sumEl = document.getElementById('tmplWeightSum');
-  if (sumEl) {
-    sumEl.textContent = sum.toFixed(1) + '%';
-    sumEl.className = Math.abs(sum - 100) < 0.05 ? 'text-green-600 font-bold' : 'text-red-600 font-bold';
+app.renderAuditTemplateBuilder = async function(id = null) {
+  let tmpl = { name: '', description: '', stages: [{ name: '', tasks: [{ name: '', weight: 0 }] }] };
+  if (id) {
+    tmpl = await this.get(`/api/templates/${id}`);
+    if (!tmpl) return;
   }
-};
-
-app.addTemplateStage = function() {
-  const div = document.createElement('div');
-  div.className = 'stage-block';
-  div.style.cssText = 'border:1px solid var(--border-color);border-radius:12px;padding:16px;margin-bottom:12px';
-  div.innerHTML = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input class="form-input tmpl-stage" placeholder="Etapa"><button class="btn btn-xs btn-danger" onclick="this.closest('.stage-block').remove();app.updateTemplateWeightSum()">✕</button></div>
-    <div class="tasks-container">
-      <div class="form-group tmpl-task-row" style="padding-left:24px;display:flex;gap:8px;align-items:center">
-        <input class="form-input tmpl-task" placeholder="Tarea">
-        <input type="number" class="form-input tmpl-task-weight" style="width:80px" placeholder="%" value="0" min="0" max="100" step="0.5" onchange="app.updateTemplateWeightSum()">
-        <div class="flex items-center bg-surface-variant/20 rounded border border-outline-variant/30">
-          <button class="px-2 py-1 text-on-surface-variant/60 hover:text-primary hover:bg-surface-variant/50 transition-colors rounded-l" title="Subir" onclick="app.moveTaskUp(this)"><span class="material-symbols-outlined text-[14px]">arrow_upward</span></button>
-          <button class="px-2 py-1 text-on-surface-variant/60 hover:text-primary hover:bg-surface-variant/50 transition-colors border-l border-r border-outline-variant/30" title="Bajar" onclick="app.moveTaskDown(this)"><span class="material-symbols-outlined text-[14px]">arrow_downward</span></button>
-          <button class="px-2 py-1 text-error/70 hover:text-error hover:bg-error-container/50 transition-colors rounded-r" title="Eliminar" onclick="this.closest('.tmpl-task-row').remove();app.updateTemplateWeightSum()"><span class="material-symbols-outlined text-[14px]">close</span></button>
+  
+  this.currentAuditTemplateId = id;
+  this.currentAuditTemplateName = tmpl.name || '';
+  this.currentAuditTemplateDesc = tmpl.description || '';
+  this.currentAuditTemplateStages = tmpl.stages?.length ? tmpl.stages : [{ name: '', tasks: [{ name: '', weight: 0 }] }];
+  
+  const body = document.getElementById('pageBody');
+  body.innerHTML = `
+    <div class="max-w-5xl mx-auto pb-20">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
+        <button class="bg-surface-container hover:bg-surface-container-high px-5 py-2.5 rounded-full text-sm font-bold text-on-surface-variant flex items-center gap-2 transition-all shadow-sm" onclick="app.navigate('templates')">
+          <span class="material-symbols-outlined text-[18px]">arrow_back</span> Volver a Plantillas
+        </button>
+        <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+          <div class="bg-white px-4 py-2.5 rounded-full shadow-sm border border-slate-200 text-sm font-semibold flex items-center gap-2">
+            Suma de Pesos: <span id="auditBuilderSum" class="font-bold text-slate-400">0%</span>
+          </div>
+          <button class="bg-primary hover:opacity-90 text-white px-8 py-2.5 rounded-full text-sm font-bold shadow-ambient transition-all active:scale-95 flex items-center gap-2" onclick="app.saveAuditTemplateBuilder()">
+            <span class="material-symbols-outlined text-[18px]">save</span> Guardar
+          </button>
         </div>
       </div>
-    </div>
-    <button class="btn btn-xs btn-secondary" onclick="app.addTemplateTask(this)">+ Tarea</button>`;
-  document.getElementById('stagesContainer').appendChild(div);
-};
 
-app.addTemplateTask = function(btn) {
-  const container = btn.previousElementSibling;
-  const div = document.createElement('div');
-  div.className = 'form-group tmpl-task-row';
-  div.style.cssText = 'padding-left:24px;display:flex;gap:8px;align-items:center';
-  div.innerHTML = `
-    <input class="form-input tmpl-task" placeholder="Tarea">
-    <input type="number" class="form-input tmpl-task-weight" style="width:80px" placeholder="%" value="0" min="0" max="100" step="0.5" onchange="app.updateTemplateWeightSum()">
-    <div class="flex items-center bg-surface-variant/20 rounded border border-outline-variant/30">
-      <button class="px-2 py-1 text-on-surface-variant/60 hover:text-primary hover:bg-surface-variant/50 transition-colors rounded-l" title="Subir" onclick="app.moveTaskUp(this)"><span class="material-symbols-outlined text-[14px]">arrow_upward</span></button>
-      <button class="px-2 py-1 text-on-surface-variant/60 hover:text-primary hover:bg-surface-variant/50 transition-colors border-l border-r border-outline-variant/30" title="Bajar" onclick="app.moveTaskDown(this)"><span class="material-symbols-outlined text-[14px]">arrow_downward</span></button>
-      <button class="px-2 py-1 text-error/70 hover:text-error hover:bg-error-container/50 transition-colors rounded-r" title="Eliminar" onclick="this.closest('.tmpl-task-row').remove();app.updateTemplateWeightSum()"><span class="material-symbols-outlined text-[14px]">close</span></button>
+      <div class="bg-white rounded-2xl shadow-ambient overflow-hidden border border-outline-variant/20 mb-8">
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-8 text-white">
+          <h2 class="text-2xl font-headline font-extrabold mb-2 flex items-center gap-3">
+            <span class="material-symbols-outlined text-3xl opacity-80">account_tree</span>
+            Constructor de Plantilla de Auditoría
+          </h2>
+          <p class="text-white/80 text-sm font-medium">Define las etapas y tareas estándar. La suma de los pesos de las tareas debe ser exactamente 100%.</p>
+        </div>
+        
+        <div class="bg-slate-50 p-6 md:p-8 border-b border-outline-variant/30 space-y-5">
+          <div class="space-y-2">
+            <label class="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Nombre de la Plantilla *</label>
+            <input type="text" id="atbName" class="w-full bg-white border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl px-4 py-3 text-base font-bold text-slate-800 placeholder:text-slate-400 shadow-sm" value="${this.currentAuditTemplateName}" placeholder="Ej: Auditoría TI Anual..." onchange="app.currentAuditTemplateName = this.value">
+          </div>
+          <div class="space-y-2">
+            <label class="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Descripción</label>
+            <textarea id="atbDesc" class="w-full bg-white border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl px-4 py-3 text-sm font-medium text-slate-700 placeholder:text-slate-400 min-h-[80px] shadow-sm" placeholder="Breve descripción del objetivo de esta plantilla..." onchange="app.currentAuditTemplateDesc = this.value">${this.currentAuditTemplateDesc}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div id="auditBuilderStagesList" class="space-y-6">
+        <!-- Stages rendered here -->
+      </div>
+      
+      <div class="mt-8 text-center pt-8 border-t border-outline-variant/30">
+        <button class="bg-white border-2 border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-600 font-bold px-8 py-4 rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-sm mx-auto" onclick="app.addAuditTemplateStage()">
+          <span class="material-symbols-outlined text-[20px]">add_box</span> Añadir Nueva Etapa
+        </button>
+      </div>
     </div>
   `;
-  container.appendChild(div);
+  
+  this.renderAuditTemplateBuilderStages();
 };
 
-app.moveTaskUp = function(btn) {
-  const row = btn.closest('.tmpl-task-row');
-  if(row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
-};
-
-app.moveTaskDown = function(btn) {
-  const row = btn.closest('.tmpl-task-row');
-  if(row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row);
-};
-
-app.saveTemplate = async function(id) {
-  const n = document.getElementById('tmplName').value.trim();
-  if(!n) return this.toast('El nombre es obligatorio','error');
-  let stages = [];
-  document.querySelectorAll('.stage-block').forEach(sb => {
-    let sname = sb.querySelector('.tmpl-stage').value.trim();
-    let tasks = [];
-    sb.querySelectorAll('.tmpl-task-row').forEach(tr => {
-      let tname = tr.querySelector('.tmpl-task').value.trim();
-      let w = parseFloat(tr.querySelector('.tmpl-task-weight').value) || 0;
-      if(tname) tasks.push({ name: tname, weight: w });
+app.syncAuditTemplateBuilderState = function() {
+  const container = document.getElementById('auditBuilderStagesList');
+  if (!container) return;
+  const stageNodes = container.querySelectorAll('.atb-stage-card');
+  const newStages = [];
+  
+  stageNodes.forEach((sNode) => {
+    const sName = sNode.querySelector('.atb-stage-name').value.trim();
+    const tasks = [];
+    sNode.querySelectorAll('.atb-task-row').forEach((tNode) => {
+      const tName = tNode.querySelector('.atb-task-name').value.trim();
+      const tWeight = parseFloat(tNode.querySelector('.atb-task-weight').value) || 0;
+      tasks.push({ name: tName, weight: tWeight });
     });
-    if(sname || tasks.length > 0) stages.push({ name: sname, tasks });
+    newStages.push({ name: sName, tasks });
   });
-  const total = stages.reduce((ts, s) => ts + s.tasks.reduce((tt, t) => tt + t.weight, 0), 0);
-  if(stages.some(s => s.tasks.length > 0) && Math.abs(total - 100) > 0.05) {
-    return this.toast('La suma total de pesos de las tareas debe ser exactamente 100%','error');
-  }
-  const d = { name: n, description: document.getElementById('tmplDesc').value.trim(), stages };
-  const res = id ? await this.put(`/api/templates/${id}`, d) : await this.post('/api/templates', d);
-  if(res?.status==='success') { this.toast('Plantilla guardada'); this.closeModal(); this.renderTemplates(); }
-  else this.toast(res?.error || 'Error al guardar', 'error');
+  
+  this.currentAuditTemplateName = document.getElementById('atbName').value.trim();
+  this.currentAuditTemplateDesc = document.getElementById('atbDesc').value.trim();
+  this.currentAuditTemplateStages = newStages;
 };
 
-app.showTemplateDetail = async function(tid) { const t = await this.get(`/api/templates/${tid}`); if (t && !t.error) this.showTemplateModal(t); };
+app.renderAuditTemplateBuilderStages = function() {
+  const container = document.getElementById('auditBuilderStagesList');
+  if (!container) return;
+  
+  let totalWeight = 0;
+  
+  container.innerHTML = this.currentAuditTemplateStages.map((s, sIdx) => {
+    const tasksHTML = (s.tasks || []).map((t, tIdx) => {
+      totalWeight += (t.weight || 0);
+      const isFirst = tIdx === 0;
+      const isLast = tIdx === s.tasks.length - 1;
+      
+      return `
+        <div class="atb-task-row flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100 group/task hover:border-slate-300 transition-colors">
+          <div class="flex flex-col items-center justify-center gap-1 w-6 flex-shrink-0">
+            <button class="w-6 h-6 rounded hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors ${isFirst ? 'invisible' : ''}" onclick="app.moveAuditTemplateTaskUp(${sIdx}, ${tIdx})" title="Subir Tarea">
+              <span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
+            </button>
+            <button class="w-6 h-6 rounded hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors ${isLast ? 'invisible' : ''}" onclick="app.moveAuditTemplateTaskDown(${sIdx}, ${tIdx})" title="Bajar Tarea">
+              <span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span>
+            </button>
+          </div>
+          
+          <input type="text" class="atb-task-name flex-grow bg-white border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded-md px-3 py-2 text-sm font-semibold text-slate-700 placeholder:text-slate-400 shadow-sm" value="${t.name}" placeholder="Nombre de la tarea...">
+          
+          <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-md px-2 py-1 shadow-sm focus-within:border-primary focus-within:ring-1 focus-within:ring-primary flex-shrink-0">
+            <input type="number" step="0.1" class="atb-task-weight bg-transparent border-none p-1 w-14 text-sm font-bold text-center text-slate-700 focus:ring-0" value="${t.weight}" min="0" max="100" onkeyup="app.updateAuditTemplateSumFast()">
+            <span class="text-xs font-bold text-slate-400">%</span>
+          </div>
+          
+          <button class="w-8 h-8 rounded-md hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors flex-shrink-0" onclick="app.removeAuditTemplateTask(${sIdx}, ${tIdx})" title="Eliminar Tarea">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      `;
+    }).join('');
+    
+    return `
+      <div class="atb-stage-card bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="bg-slate-100 p-4 border-b border-slate-200 flex gap-4 items-center">
+          <div class="w-8 h-8 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center font-bold text-sm flex-shrink-0">${sIdx + 1}</div>
+          <input type="text" class="atb-stage-name flex-grow bg-white border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-2 text-base font-bold text-slate-800 placeholder:text-slate-400 shadow-sm" value="${s.name}" placeholder="Nombre de la etapa (Ej: Planificación)">
+          <button class="w-9 h-9 rounded-lg hover:bg-red-100 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors flex-shrink-0 bg-white border border-slate-200 shadow-sm" onclick="app.removeAuditTemplateStage(${sIdx})" title="Eliminar Etapa Completa">
+            <span class="material-symbols-outlined text-[20px]">delete</span>
+          </button>
+        </div>
+        
+        <div class="p-4 pl-6 space-y-3">
+          ${tasksHTML}
+          <div class="pt-2 pl-9">
+             <button class="bg-blue-50 text-primary font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 hover:bg-blue-100 transition-colors" onclick="app.addAuditTemplateTask(${sIdx})">
+               <span class="material-symbols-outlined text-[16px]">add</span> Añadir Tarea
+             </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  if (this.currentAuditTemplateStages.length === 0) {
+    container.innerHTML = `<div class="text-center py-10 text-slate-400 font-medium">No hay etapas definidas. Haz clic en "Añadir Nueva Etapa".</div>`;
+  }
+  
+  this.updateAuditTemplateSumUI(totalWeight);
+};
+
+app.updateAuditTemplateSumFast = function() {
+  const container = document.getElementById('auditBuilderStagesList');
+  if (!container) return;
+  let sum = 0;
+  container.querySelectorAll('.atb-task-weight').forEach(input => {
+    sum += parseFloat(input.value) || 0;
+  });
+  this.updateAuditTemplateSumUI(sum);
+};
+
+app.updateAuditTemplateSumUI = function(totalWeight) {
+  const sumEl = document.getElementById('auditBuilderSum');
+  if (sumEl) {
+    sumEl.textContent = totalWeight.toFixed(1) + '%';
+    if (Math.abs(totalWeight - 100) < 0.05) {
+      sumEl.className = 'font-extrabold text-green-600 bg-green-50 px-2 py-0.5 rounded';
+    } else {
+      sumEl.className = 'font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded';
+    }
+  }
+};
+
+app.addAuditTemplateStage = function() {
+  this.syncAuditTemplateBuilderState();
+  this.currentAuditTemplateStages.push({ name: '', tasks: [{ name: '', weight: 0 }] });
+  this.renderAuditTemplateBuilderStages();
+  setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50);
+};
+
+app.removeAuditTemplateStage = function(sIdx) {
+  if (!confirm('¿Eliminar esta etapa y todas sus tareas?')) return;
+  this.syncAuditTemplateBuilderState();
+  this.currentAuditTemplateStages.splice(sIdx, 1);
+  this.renderAuditTemplateBuilderStages();
+};
+
+app.addAuditTemplateTask = function(sIdx) {
+  this.syncAuditTemplateBuilderState();
+  this.currentAuditTemplateStages[sIdx].tasks.push({ name: '', weight: 0 });
+  this.renderAuditTemplateBuilderStages();
+};
+
+app.removeAuditTemplateTask = function(sIdx, tIdx) {
+  this.syncAuditTemplateBuilderState();
+  this.currentAuditTemplateStages[sIdx].tasks.splice(tIdx, 1);
+  this.renderAuditTemplateBuilderStages();
+};
+
+app.moveAuditTemplateTaskUp = function(sIdx, tIdx) {
+  if (tIdx === 0) return;
+  this.syncAuditTemplateBuilderState();
+  const tasks = this.currentAuditTemplateStages[sIdx].tasks;
+  const temp = tasks[tIdx - 1];
+  tasks[tIdx - 1] = tasks[tIdx];
+  tasks[tIdx] = temp;
+  this.renderAuditTemplateBuilderStages();
+};
+
+app.moveAuditTemplateTaskDown = function(sIdx, tIdx) {
+  this.syncAuditTemplateBuilderState();
+  const tasks = this.currentAuditTemplateStages[sIdx].tasks;
+  if (tIdx === tasks.length - 1) return;
+  const temp = tasks[tIdx + 1];
+  tasks[tIdx + 1] = tasks[tIdx];
+  tasks[tIdx] = temp;
+  this.renderAuditTemplateBuilderStages();
+};
+
+app.saveAuditTemplateBuilder = async function() {
+  this.syncAuditTemplateBuilderState();
+  
+  const n = this.currentAuditTemplateName;
+  if (!n) return this.toast('El nombre de la plantilla es obligatorio', 'error');
+  
+  // Clean up empty tasks/stages
+  const stages = [];
+  this.currentAuditTemplateStages.forEach(s => {
+    const sname = s.name.trim();
+    const tasks = s.tasks.filter(t => t.name.trim() !== '');
+    if (sname !== '' || tasks.length > 0) {
+      stages.push({ name: sname, tasks });
+    }
+  });
+  
+  const total = stages.reduce((ts, s) => ts + s.tasks.reduce((tt, t) => tt + t.weight, 0), 0);
+  if (stages.some(s => s.tasks.length > 0) && Math.abs(total - 100) > 0.05) {
+    return this.toast('La suma total de pesos de las tareas debe ser exactamente 100%', 'error');
+  }
+  
+  const payload = { name: n, description: this.currentAuditTemplateDesc, stages };
+  try {
+    const res = this.currentAuditTemplateId 
+      ? await this.put(`/api/templates/${this.currentAuditTemplateId}`, payload)
+      : await this.post('/api/templates', payload);
+      
+    if (res?.status === 'success') {
+      this.toast('Plantilla guardada exitosamente');
+      this.navigate('templates');
+    } else {
+      this.toast(res?.error || 'Error al guardar la plantilla', 'error');
+    }
+  } catch (err) {
+    this.toast('Ocurrió un error inesperado al guardar', 'error');
+  }
+};
 app.duplicateTemplate = async function(tid) { const r = await this.post(`/api/templates/${tid}/duplicate`); if (r?.status === 'success') { this.toast('Duplicada'); this.renderTemplates(); } };
 app.deleteTemplate = async function(tid) { if (!confirm('¿Eliminar?')) return; await this.del(`/api/templates/${tid}`); this.toast('Eliminada'); this.renderTemplates(); };
 
@@ -919,6 +1061,7 @@ app.renderMasterData = async function() {
       <button onclick="app.masterDataTab='auditors';app.renderMasterData()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='auditors'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">👤 Auditores</button>
       <button onclick="app.masterDataTab='areas';app.renderMasterData()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='areas'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">🏢 Áreas Responsables</button>
       <button onclick="app.masterDataTab='categories';app.renderMasterData()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='categories'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">🏷️ Categorías</button>
+      <button onclick="app.masterDataTab='stakeholders';app.renderMasterData()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='stakeholders'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">🤝 Partes Interesadas</button>
     </div>
   `;
   
@@ -1020,8 +1163,340 @@ app.renderMasterData = async function() {
                 <button class="w-10 h-10 rounded-xl hover:bg-error-container/20 text-error transition-colors flex items-center justify-center" onclick="event.stopPropagation();app.removeCategory('${c.id}')"><span class="material-symbols-outlined text-[18px]">delete</span></button>
               </div>`}
             </div>`).join('')}
+    </div>
+      </div>`;
+  } else if (tab === 'stakeholders') {
+    const stks = await this.get('/api/master/stakeholders') || [];
+    app.currentMasterStakeholders = stks;
+    body.innerHTML = tabsHTML + `
+      <div class="bg-surface-container-low p-8 rounded-[3rem] shadow-ambient">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h3 class="text-xl font-headline font-extrabold text-white">Catálogo de Partes Interesadas</h3>
+            <p class="text-sm text-white/80 font-medium">Gestiona las partes interesadas globales para las auditorías</p>
+          </div>
+          ${isR ? '' : `
+          <button class="bg-primary text-white font-bold px-6 py-2 rounded-xl text-sm hover:opacity-90 transition-all flex items-center gap-2" onclick="app.showEditMasterStakeholderModal()">
+            <span class="material-symbols-outlined text-[18px]">person_add</span> Registrar
+          </button>`}
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="stakeholderList">
+          ${stks.length === 0 ? '<div class="col-span-full py-20 text-center text-white/60"><span class="material-symbols-outlined text-4xl mb-4">group_off</span><p>No hay partes interesadas registradas</p></div>' :
+          stks.map(s => `
+            <div class="bg-surface-container-lowest p-6 rounded-[2rem] shadow-sm border border-outline-variant flex flex-col items-center gap-4 group hover:shadow-ambient transition-all cursor-pointer" onclick="if(!${isR}) app.showEditMasterStakeholderModal('${s.id}')">
+              <div class="w-16 h-16 rounded-3xl bg-surface-container-low flex items-center justify-center text-xl font-headline font-extrabold text-primary group-hover:bg-primary group-hover:text-white transition-all shadow-sm">
+                ${s.name.charAt(0).toUpperCase()}
+              </div>
+              <div class="text-center w-full">
+                <div class="text-base font-headline font-extrabold text-on-surface truncate px-2" title="${s.name}">${s.name}</div>
+                <div class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40 mt-1 truncate px-2" title="${s.role_title}">${s.role_title}</div>
+                <div class="text-xs text-on-surface-variant/60 mt-1 truncate px-2" title="${s.email}">${s.email}</div>
+              </div>
+              ${isR ? '' : `
+              <div class="flex items-center gap-2 mt-2 pt-4 border-t border-outline-variant w-full justify-center">
+                <button class="w-10 h-10 rounded-xl hover:bg-surface-container-low transition-colors text-on-surface-variant flex items-center justify-center" onclick="event.stopPropagation();app.showEditMasterStakeholderModal('${s.id}')"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                <button class="w-10 h-10 rounded-xl hover:bg-error-container/20 text-error transition-colors flex items-center justify-center" onclick="event.stopPropagation();app.removeMasterStakeholder('${s.id}')"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+              </div>`}
+            </div>`).join('')}
         </div>
       </div>`;
+  }
+};
+
+app.showEditMasterStakeholderModal = function(id = null) {
+  let s = { name: '', email: '', role_title: 'Auditado' };
+  if (id) {
+    const list = app.currentMasterStakeholders || [];
+    const found = list.find(x => x.id === id);
+    if (found) s = found;
+  }
+  
+  this.openModal(id ? 'Editar Parte Interesada' : 'Nueva Parte Interesada', `
+    <div class="space-y-4">
+      <div class="form-group"><label class="form-label text-xs">Nombre Completo</label><input class="form-input bg-surface-container-low" id="msName" value="${s.name}"></div>
+      <div class="form-group"><label class="form-label text-xs">Correo Electrónico</label><input class="form-input bg-surface-container-low" id="msEmail" type="email" value="${s.email}"></div>
+      <div class="form-group"><label class="form-label text-xs">Cargo / Rol</label><input class="form-input bg-surface-container-low" id="msRole" value="${s.role_title}"></div>
+    </div>
+  `, `<button class="btn btn-secondary font-bold" onclick="app.closeModal()">Cancelar</button>
+      <button class="btn btn-primary font-bold shadow-ambient" onclick="app.saveMasterStakeholder('${id || ''}')">Guardar</button>`);
+};
+
+app.saveMasterStakeholder = async function(id) {
+  const name = document.getElementById('msName').value.trim();
+  const email = document.getElementById('msEmail').value.trim();
+  const role_title = document.getElementById('msRole').value.trim();
+  if (!name || !email) return this.toast('Nombre y Correo requeridos', 'error');
+  
+  let res;
+  if (id) {
+    res = await this.put(`/api/master/stakeholders/${id}`, { name, email, role_title });
+  } else {
+    res = await this.post('/api/master/stakeholders', { name, email, role_title });
+  }
+  
+  if (res && res.status === 'success') {
+    this.toast('Guardado exitosamente');
+    this.closeModal();
+    this.renderMasterData();
+  } else {
+    this.toast(res?.error || 'Error al guardar', 'error');
+  }
+};
+
+app.removeMasterStakeholder = async function(id) {
+  if (!confirm('¿Eliminar esta parte interesada?')) return;
+  const res = await this.del(`/api/master/stakeholders/${id}`);
+  if (res && res.status === 'success') {
+    this.toast('Eliminado exitosamente');
+    this.renderMasterData();
+  }
+};
+
+app.showEditSurveyTemplateModal = async function(id = null) {
+  let tmpl = { name: '', description: '' };
+  if (id) {
+    const res = await this.get(`/api/survey-templates/${id}`);
+    if (res) tmpl = res;
+  }
+  
+  this.openModal(id ? 'Editar Plantilla' : 'Nueva Plantilla', `
+    <div class="space-y-4">
+      <div class="form-group">
+        <label class="form-label text-xs">Nombre de la Plantilla</label>
+        <input class="form-input bg-surface-container-low" id="stName" value="${tmpl.name}" placeholder="Ej. Encuesta de Cierre 2026">
+      </div>
+      <div class="form-group">
+        <label class="form-label text-xs">Descripción</label>
+        <textarea class="form-input bg-surface-container-low" id="stDesc" rows="3" placeholder="Descripción de esta plantilla">${tmpl.description}</textarea>
+      </div>
+    </div>
+  `, `
+    <button class="btn btn-secondary font-bold" onclick="app.closeModal()">Cancelar</button>
+    <button class="btn btn-primary font-bold shadow-ambient" onclick="app.saveSurveyTemplate('${id || ''}')">Guardar</button>
+  `);
+};
+
+app.saveSurveyTemplate = async function(id) {
+  const name = document.getElementById('stName').value.trim();
+  const description = document.getElementById('stDesc').value.trim();
+  if (!name) return this.toast('El nombre es requerido', 'error');
+  
+  const payload = { name, description };
+  let res;
+  if (id) res = await this.put(`/api/survey-templates/${id}`, payload);
+  else res = await this.post(`/api/survey-templates`, payload);
+  
+  if (res && res.status === 'success') {
+    this.toast('Plantilla guardada exitosamente');
+    this.closeModal();
+    this.renderMasterData();
+  }
+};
+
+app.deleteSurveyTemplate = async function(id) {
+  if (!confirm('¿Estás seguro de eliminar esta plantilla? También se eliminarán sus preguntas.')) return;
+  const res = await this.del(`/api/survey-templates/${id}`);
+  if (res && res.status === 'success') {
+    this.toast('Plantilla eliminada');
+    this.renderMasterData();
+  }
+};
+
+app.renderSurveyBuilder = async function(id) {
+  const tmpl = await this.get(`/api/survey-templates/${id}`);
+  if (!tmpl) return;
+  
+  this.currentSurveyTemplateId = id;
+  this.currentSurveyQuestions = tmpl.questions || [];
+  
+  const body = document.getElementById('pageBody');
+  body.innerHTML = `
+    <div class="max-w-4xl mx-auto pb-20">
+      <div class="flex items-center justify-between mb-8">
+        <button class="bg-surface-container hover:bg-surface-container-high px-5 py-2.5 rounded-full text-sm font-bold text-on-surface-variant flex items-center gap-2 transition-all shadow-sm" onclick="app.masterDataTab='survey_templates'; app.renderMasterData()">
+          <span class="material-symbols-outlined text-[18px]">arrow_back</span> Volver a Plantillas
+        </button>
+        <button class="bg-primary hover:opacity-90 text-white px-8 py-2.5 rounded-full text-sm font-bold shadow-ambient transition-all active:scale-95 flex items-center gap-2" onclick="app.saveSurveyBuilder()">
+          <span class="material-symbols-outlined text-[18px]">save</span> Guardar Cambios
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-ambient overflow-hidden border border-outline-variant/20">
+        <div class="bg-gradient-to-br from-blue-900 to-slate-900 p-8 text-white">
+          <h2 class="text-2xl font-headline font-extrabold mb-2 flex items-center gap-3">
+            <span class="material-symbols-outlined text-3xl opacity-80">design_services</span>
+            Constructor de Encuesta
+          </h2>
+          <p class="text-white/80 text-sm font-medium">Plantilla: <span class="font-bold text-white">${tmpl.name}</span></p>
+        </div>
+        
+        <div class="bg-slate-50 p-6 md:p-10 border-b border-outline-variant/30">
+          <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mb-8 text-blue-900 text-sm font-medium shadow-sm">
+            💡 <strong>Instrucciones:</strong> Define las preguntas de la encuesta. Usa los botones laterales para reordenarlas. Los usuarios verán un diseño similar a este al responder.
+          </div>
+          
+          <div id="surveyBuilderQuestionsList" class="space-y-5">
+            <!-- Questions rendered here -->
+          </div>
+          
+          <div class="mt-8 text-center pt-8 border-t border-outline-variant/30">
+            <button class="bg-white border-2 border-dashed border-primary/40 hover:border-primary hover:bg-blue-50 text-primary font-bold px-8 py-4 rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-sm w-full md:w-auto md:inline-flex mx-auto" onclick="app.addSurveyBuilderQuestion()">
+              <span class="material-symbols-outlined text-[20px]">add_circle</span> Añadir Nueva Pregunta
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  this.renderSurveyBuilderQuestions();
+};
+
+app.syncSurveyBuilderState = function() {
+  const container = document.getElementById('surveyBuilderQuestionsList');
+  if (!container) return;
+  const rows = container.querySelectorAll('.sq-card');
+  const newQuestions = [];
+  rows.forEach((row, idx) => {
+    const text = row.querySelector('.sq-text').value.trim();
+    const type = row.querySelector('.sq-type').value;
+    const req = row.querySelector('.sq-req').checked;
+    const weight = parseFloat(row.querySelector('.sq-weight').value) || 1.0;
+    const just = parseInt(row.querySelector('.sq-just').value);
+    
+    newQuestions.push({
+      question_text: text,
+      question_type: type,
+      is_required: req,
+      weight: weight,
+      requires_justification_below: isNaN(just) ? null : just,
+      id: this.currentSurveyQuestions[idx]?.id // preserve ID if exists
+    });
+  });
+  this.currentSurveyQuestions = newQuestions;
+};
+
+app.renderSurveyBuilderQuestions = function() {
+  const container = document.getElementById('surveyBuilderQuestionsList');
+  if (!container) return;
+  
+  container.innerHTML = this.currentSurveyQuestions.map((q, idx) => {
+    const isScale = (q.question_type === 'escala' || q.question_type === 'scale');
+    const isFirst = idx === 0;
+    const isLast = idx === this.currentSurveyQuestions.length - 1;
+    
+    return `
+      <div class="sq-card bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-slate-300 transition-colors flex gap-4 group">
+        
+        <!-- Reorder Controls -->
+        <div class="flex flex-col items-center justify-center gap-1 w-8 flex-shrink-0">
+          <button class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors ${isFirst ? 'invisible' : ''}" onclick="app.moveSurveyQuestionUp(${idx})" title="Subir">
+            <span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span>
+          </button>
+          <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">${idx + 1}</div>
+          <button class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors ${isLast ? 'invisible' : ''}" onclick="app.moveSurveyQuestionDown(${idx})" title="Bajar">
+            <span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+          </button>
+        </div>
+        
+        <!-- Question Content -->
+        <div class="flex-grow flex flex-col gap-4">
+          <div class="flex gap-3 items-start">
+            <input type="text" class="sq-text flex-grow bg-slate-50 border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-2 text-sm font-semibold text-slate-800 placeholder:text-slate-400" value="${q.question_text}" placeholder="Escriba la pregunta aquí...">
+            <button class="w-9 h-9 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors flex-shrink-0" onclick="app.removeSurveyBuilderQuestion(${idx})" title="Eliminar">
+              <span class="material-symbols-outlined text-[18px]">delete</span>
+            </button>
+          </div>
+          
+          <div class="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-100 rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <label class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Formato:</label>
+              <select class="sq-type bg-white border border-slate-200 rounded text-xs font-semibold px-2 py-1 focus:ring-primary focus:border-primary cursor-pointer text-slate-700" onchange="const row = this.closest('.sq-card'); row.querySelector('.sq-scale-opts').style.display = (this.value === 'escala' || this.value === 'scale') ? 'flex' : 'none';">
+                <option value="escala" ${isScale ? 'selected' : ''}>Escala (1-5)</option>
+                <option value="texto" ${!isScale ? 'selected' : ''}>Texto Abierto</option>
+              </select>
+            </div>
+            
+            <div class="w-[1px] h-5 bg-slate-300"></div>
+            
+            <label class="flex items-center gap-2 cursor-pointer group/req">
+              <input type="checkbox" class="sq-req rounded text-primary focus:ring-0 w-4 h-4 border-slate-300" ${q.is_required ? 'checked' : ''}>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover/req:text-primary transition-colors">Respuesta Obligatoria</span>
+            </label>
+            
+            <div class="sq-scale-opts flex flex-wrap gap-4 items-center pl-4 border-l border-slate-300" style="display: ${isScale ? 'flex' : 'none'}">
+               <div class="flex items-center gap-2">
+                 <label class="text-[10px] font-bold uppercase tracking-widest text-slate-500" title="Peso de la pregunta en la nota final">Ponderación:</label>
+                 <input type="number" step="0.1" class="sq-weight bg-white border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded px-2 py-1 text-xs w-16 text-center font-semibold text-slate-700" value="${q.weight || 1.0}">
+               </div>
+               <div class="flex items-center gap-2">
+                 <label class="text-[10px] font-bold uppercase tracking-widest text-slate-500" title="Exigir justificación si la nota es menor o igual a">Justificar si <= a:</label>
+                 <input type="number" min="0" max="4" class="sq-just bg-white border border-slate-200 focus:border-primary focus:ring-1 focus:ring-primary rounded px-2 py-1 text-xs w-14 text-center font-semibold text-slate-700" value="${q.requires_justification_below !== null ? q.requires_justification_below : 2}">
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  if (this.currentSurveyQuestions.length === 0) {
+    container.innerHTML = `<div class="text-center py-10 text-slate-400 font-medium">No hay preguntas definidas. Haz clic en "Añadir Nueva Pregunta" para comenzar.</div>`;
+  }
+};
+
+app.addSurveyBuilderQuestion = function() {
+  this.syncSurveyBuilderState();
+  this.currentSurveyQuestions.push({ question_text: '', question_type: 'escala', is_required: 1, requires_justification_below: 2, weight: 1.0 });
+  this.renderSurveyBuilderQuestions();
+  
+  // scroll to bottom
+  setTimeout(() => {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  }, 50);
+};
+
+app.removeSurveyBuilderQuestion = function(idx) {
+  this.syncSurveyBuilderState();
+  this.currentSurveyQuestions.splice(idx, 1);
+  this.renderSurveyBuilderQuestions();
+};
+
+app.moveSurveyQuestionUp = function(idx) {
+  if (idx === 0) return;
+  this.syncSurveyBuilderState();
+  const temp = this.currentSurveyQuestions[idx - 1];
+  this.currentSurveyQuestions[idx - 1] = this.currentSurveyQuestions[idx];
+  this.currentSurveyQuestions[idx] = temp;
+  this.renderSurveyBuilderQuestions();
+};
+
+app.moveSurveyQuestionDown = function(idx) {
+  if (idx === this.currentSurveyQuestions.length - 1) return;
+  this.syncSurveyBuilderState();
+  const temp = this.currentSurveyQuestions[idx + 1];
+  this.currentSurveyQuestions[idx + 1] = this.currentSurveyQuestions[idx];
+  this.currentSurveyQuestions[idx] = temp;
+  this.renderSurveyBuilderQuestions();
+};
+
+app.saveSurveyBuilder = async function() {
+  this.syncSurveyBuilderState();
+  
+  // Filter out completely empty questions
+  const validQuestions = this.currentSurveyQuestions.filter(q => q.question_text.trim() !== '');
+  
+  try {
+    const res = await this.put(`/api/survey-templates/${this.currentSurveyTemplateId}/questions`, { questions: validQuestions });
+    if (res && res.status === 'success') {
+      this.toast('Preguntas actualizadas exitosamente');
+      this.masterDataTab = 'survey_templates';
+      this.renderMasterData();
+    } else {
+      this.toast(res?.error || 'Error al guardar en el servidor', 'error');
+    }
+  } catch (err) {
+    this.toast('Ocurrió un error inesperado al guardar', 'error');
   }
 };
 
@@ -1518,4 +1993,665 @@ app.permanentDeleteRecycledItem = async function(type, id) {
   if(!confirm(`⚠️ ADVERTENCIA: Esta acción es irreversible.\n\n¿Estás seguro de eliminar permanentemente este registro (${type})?`)) return;
   const res = await this.del(`/api/recycle-bin/permanent`, { body: { type, id } });
   if(res && res.status==='success') { this.toast('Eliminado de forma definitiva'); this.loadRecycleView(); }
+};
+
+// ─── SATISFACTION SURVEYS UI ───────────────────────────────────────────────
+
+app.loadAuditSurveySection = async function(aid, isReadonly) {
+  const container = document.getElementById('auditSurveyContainer');
+  if (!container) return;
+  
+  if (!['admin', 'gerente', 'jefe'].includes(this.user?.role)) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  
+  const stakeholders = await this.get(`/api/audits/${aid}/stakeholders`) || [];
+  const results = await this.get(`/api/audits/${aid}/survey-results`);
+  
+  let dashboardHtml = '';
+  if (results && results.stats.total_sent > 0) {
+    const s = results.stats;
+    const rate = Math.round((s.total_responded / s.total_sent) * 100) || 0;
+    
+    let pendingAlert = '';
+    const maxPending = results.pending_details.reduce((max, p) => p.days_pending > max ? p.days_pending : max, 0);
+    if (maxPending >= 3) {
+      pendingAlert = `<div class="bg-amber-100 text-amber-800 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 mt-2 w-full"><span class="material-symbols-outlined text-[14px]">warning</span> Hay encuestas sin responder hace ${maxPending} días</div>`;
+    }
+    
+    dashboardHtml = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+          <div class="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">Enviadas</div>
+          <div class="text-2xl font-headline font-extrabold text-blue-900">${s.total_sent}</div>
+        </div>
+        <div class="bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col justify-center">
+          <div class="text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">Respondidas</div>
+          <div class="flex items-end gap-2">
+            <div class="text-2xl font-headline font-extrabold text-green-900">${s.total_responded}</div>
+            <div class="text-xs font-bold text-green-700 mb-1">(${rate}%)</div>
+          </div>
+        </div>
+        <div class="bg-amber-50 p-4 rounded-xl border border-amber-100 flex flex-col justify-center">
+          <div class="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">Pendientes</div>
+          <div class="text-2xl font-headline font-extrabold text-amber-900">${s.total_pending}</div>
+        </div>
+        ${pendingAlert ? `<div class="col-span-full">${pendingAlert}</div>` : ''}
+      </div>
+      ${s.total_responded > 0 ? `
+        <div class="mb-6 flex justify-end">
+          <button class="btn bg-surface-container-high text-primary hover:bg-primary hover:text-white btn-sm font-bold shadow-sm flex items-center gap-2 transition-all" onclick="app.showSurveyResultsModal('${aid}')"><span class="material-symbols-outlined text-[16px]">bar_chart</span> Ver Respuestas Detalladas</button>
+        </div>
+      ` : ''}
+    `;
+  }
+  
+  let html = `
+    <div class="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/60 shadow-sm mt-6">
+      <div class="flex justify-between items-center mb-6">
+        <h4 class="font-headline font-extrabold text-on-surface text-sm flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">thumbs_up_down</span> Encuestas de Satisfacción</h4>
+        ${!isReadonly ? `
+          <div class="flex gap-2">
+            <button class="btn bg-surface-container-high text-on-surface hover:text-primary btn-sm flex items-center gap-1 font-semibold" onclick="app.showAddStakeholderModal('${aid}')"><span class="material-symbols-outlined text-[16px]">person_add</span> Interesado</button>
+            <button class="btn bg-primary text-white hover:opacity-90 shadow-ambient btn-sm flex items-center gap-1 font-bold" onclick="app.showDistributeSurveyModal('${aid}')"><span class="material-symbols-outlined text-[16px]">send</span> Distribuir</button>
+          </div>
+        ` : ''}
+      </div>
+      ${dashboardHtml}
+      <div class="table-wrapper">
+        <table class="task-table resizable-table w-full">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Email</th>
+              <th>Rol / Cargo</th>
+              <th>Estado / Nota</th>
+              ${!isReadonly ? '<th style="width:100px">Acciones</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${stakeholders.length === 0 ? '<tr><td colspan="5" class="py-6 text-center text-on-surface-variant/50 text-[13px] italic">Sin partes interesadas registradas. Agregue auditados para enviarles encuestas.</td></tr>' : ''}
+            ${stakeholders.map(s => `
+              <tr class="hover:bg-surface-variant/10 transition-colors group">
+                <td class="font-bold text-[13px] py-3 text-on-surface">${s.name}</td>
+                <td class="text-[13px] py-3 text-on-surface-variant">${s.email}</td>
+                <td class="text-[13px] py-3 text-on-surface-variant">${s.role_title}</td>
+                <td class="py-3 text-[13px] font-semibold">
+                  <span class="px-2 py-1 rounded-md bg-opacity-10 ${s.survey_status==='Respondida'?'text-green-600 bg-green-500':(s.survey_status==='Enviada'?'text-amber-600 bg-amber-500':'text-on-surface-variant bg-surface-variant')}">
+                    ${s.survey_status === 'Respondida' && s.avg_score ? `Nota ${((s.avg_score - 1) * 1.5 + 1).toFixed(1)}` : (s.survey_status || 'Sin Enviar')}
+                  </span>
+                </td>
+                ${!isReadonly ? `
+                <td class="py-3">
+                  <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    ${s.survey_status === 'Enviada' && s.survey_token ? `
+                      <button class="bg-primary/10 text-primary p-1.5 rounded-lg hover:bg-primary hover:text-white transition-all shadow-sm" onclick="app.copySurveyLink('${s.survey_token}')" title="Copiar Enlace Seguro"><span class="material-symbols-outlined text-[14px]">link</span></button>
+                      <button class="bg-amber-500/10 text-amber-600 p-1.5 rounded-lg hover:bg-amber-500 hover:text-white transition-all shadow-sm" onclick="app.resendSurvey('${aid}', '${s.id}')" title="Reenviar Correo"><span class="material-symbols-outlined text-[14px]">forward_to_inbox</span></button>
+                    ` : ''}
+                    <button class="bg-error-container/30 text-error p-1.5 rounded-lg hover:bg-error hover:text-white transition-all shadow-sm" onclick="app.deleteStakeholder('${aid}', '${s.id}')" title="Eliminar"><span class="material-symbols-outlined text-[14px]">delete</span></button>
+                  </div>
+                </td>` : ''}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  container.innerHTML = html;
+};
+
+app.showSurveyResultsModal = async function(aid) {
+  const results = await this.get(`/api/audits/${aid}/survey-results`);
+  if (!results || results.responses.length === 0) return this.toast('No hay respuestas aún', 'info');
+  
+  let html = `<div class="space-y-6 overflow-y-auto p-1 custom-scrollbar">`;
+  
+  results.responses.forEach(r => {
+    let totalScore = 0, count = 0;
+    r.data.forEach(v => {
+      if ((v.type === 'escala' || v.type === 'scale') && v.value) {
+        totalScore += parseFloat(v.value);
+        count++;
+      }
+    });
+    let avgGradeHtml = '';
+    if (count > 0) {
+      const avgGrade = (((totalScore / count) - 1) * 1.5 + 1).toFixed(1);
+      avgGradeHtml = `<span class="ml-4 px-2 py-1 rounded-lg ${avgGrade < 4.0 ? 'bg-error-container text-error' : 'bg-green-100 text-green-700'} font-bold text-xs uppercase tracking-wider shadow-sm">Nota Final: ${avgGrade}</span>`;
+    }
+
+    html += `
+      <div class="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant shadow-sm">
+        <div class="flex items-start justify-between pb-3 border-b border-outline-variant/50 mb-4">
+          <h5 class="font-bold text-sm text-on-surface flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[18px] bg-primary/10 p-1.5 rounded-lg">person</span> 
+            <div class="flex flex-col">
+              <div class="flex items-center">
+                <span>${r.stakeholder}</span>
+                ${avgGradeHtml}
+              </div>
+              <span class="text-[10px] text-on-surface-variant uppercase tracking-widest font-normal mt-0.5">${r.created_at ? 'Respondido el ' + this.fmtDate(r.created_at) + ' a las ' + new Date(r.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Sin fecha'}</span>
+            </div>
+          </h5>
+          <span class="text-[10px] text-on-surface-variant uppercase tracking-widest bg-surface-container-high px-2 py-1 rounded font-bold">${r.role}</span>
+        </div>
+        <div class="space-y-4">
+    `;
+    
+    r.data.forEach(ans => {
+      let ansHtml = '';
+      if (ans.type === 'escala' || ans.type === 'scale') {
+        const grade = ((ans.value - 1) * 1.5 + 1).toFixed(1);
+        ansHtml = `<div class="flex items-center gap-2 mt-1.5">
+          <span class="font-bold text-sm px-2 py-0.5 rounded ${grade < 4.0 ? 'bg-error-container text-error' : 'bg-green-100 text-green-700'}">Nota ${grade}</span>
+          ${ans.justification ? `<div class="text-xs text-on-surface-variant bg-surface-container-low p-2 rounded-lg w-full border-l-2 border-error italic">Justificación: "${ans.justification}"</div>` : ''}
+        </div>`;
+      } else {
+        ansHtml = `<div class="text-xs text-on-surface-variant bg-surface-container-low p-3 rounded-xl mt-1.5 border border-outline-variant/50 italic">"${ans.value || 'Sin respuesta'}"</div>`;
+      }
+      
+      html += `
+        <div>
+          <div class="text-[11px] font-bold text-on-surface/80 uppercase tracking-wide">${ans.question}</div>
+          ${ansHtml}
+        </div>
+      `;
+    });
+    
+    html += `</div></div>`;
+  });
+  
+  html += `</div>`;
+  
+  this.openModal('Respuestas Detalladas', html, `<button class="bg-surface-container-highest/20 text-on-surface-variant font-bold px-6 py-3 rounded-2xl text-sm transition-all hover:bg-surface-container-highest/40" onclick="app.closeModal()">Cerrar</button>`, true);
+};
+
+app.showAddStakeholderModal = async function(aid) {
+  const masterStks = await this.get('/api/master/stakeholders') || [];
+  app.tempMasterStakeholders = masterStks; // store for onchange
+  
+  let masterOptions = '<option value="">(Ingresar manualmente)</option>';
+  masterStks.forEach(s => {
+    masterOptions += `<option value="${s.id}">${s.name} - ${s.role_title}</option>`;
+  });
+
+  this.openModal('Registrar Parte Interesada', `
+    <div class="space-y-4">
+      <div class="form-group mb-6">
+        <label class="form-label text-xs text-primary font-bold">Seleccionar desde Datos Maestros (Opcional)</label>
+        <select class="form-input bg-surface-container-low" onchange="app.autofillStakeholder(this.value)">
+          ${masterOptions}
+        </select>
+        <p class="text-[10px] text-white/50 mt-1">Si seleccionas uno, los campos de abajo se autocompletarán.</p>
+      </div>
+      <div class="h-px bg-outline-variant/30 w-full mb-4"></div>
+      <div class="form-group"><label class="form-label text-xs">Nombre Completo</label><input class="form-input bg-surface-container-low" id="stkName" placeholder="Ej. Juan Pérez"></div>
+      <div class="form-group"><label class="form-label text-xs">Correo Electrónico</label><input class="form-input bg-surface-container-low" id="stkEmail" type="email" placeholder="jperez@empresa.com"></div>
+      <div class="form-group"><label class="form-label text-xs">Rol / Cargo</label><input class="form-input bg-surface-container-low" id="stkRole" value="Auditado"></div>
+    </div>
+  `, `<button class="btn btn-secondary font-bold" onclick="app.closeModal()">Cancelar</button>
+      <button class="btn btn-primary font-bold shadow-ambient" onclick="app.saveStakeholder('${aid}')">Guardar</button>`);
+};
+
+app.autofillStakeholder = function(masterId) {
+  if (!masterId) {
+    document.getElementById('stkName').value = '';
+    document.getElementById('stkEmail').value = '';
+    document.getElementById('stkRole').value = 'Auditado';
+    return;
+  }
+  const s = app.tempMasterStakeholders.find(x => x.id === masterId);
+  if (s) {
+    document.getElementById('stkName').value = s.name;
+    document.getElementById('stkEmail').value = s.email;
+    document.getElementById('stkRole').value = s.role_title;
+  }
+};
+
+app.saveStakeholder = async function(aid) {
+  const name = document.getElementById('stkName').value.trim();
+  const email = document.getElementById('stkEmail').value.trim();
+  const role = document.getElementById('stkRole').value.trim();
+  if (!name || !email) return this.toast('Nombre y Email requeridos', 'error');
+  
+  const res = await this.post(`/api/audits/${aid}/stakeholders`, { name, email, role_title: role });
+  if (res && res.status === 'success') {
+    this.toast('Parte interesada registrada');
+    this.closeModal();
+    this.loadAuditSurveySection(aid, false);
+  }
+};
+
+app.deleteStakeholder = async function(aid, sid) {
+  if (!confirm('¿Eliminar esta parte interesada?')) return;
+  const res = await this.del(`/api/audits/${aid}/stakeholders/${sid}`);
+  if (res && res.status === 'success') {
+    this.toast('Eliminada');
+    this.loadAuditSurveySection(aid, false);
+  }
+};
+
+app.showDistributeSurveyModal = async function(aid) {
+  const stakeholders = await this.get(`/api/audits/${aid}/stakeholders`) || [];
+  const templates = await this.get('/api/survey-templates') || [];
+  
+  if (stakeholders.length === 0) return this.toast('Agregue primero al menos un auditado o parte interesada.', 'error');
+  if (templates.length === 0) return this.toast('No hay plantillas de encuesta disponibles.', 'error');
+  
+  let html = `
+    <div class="space-y-6">
+      <div class="bg-primary/10 border-l-4 border-primary p-3 rounded-r-lg text-xs text-primary font-medium">
+        Se enviará un correo electrónico corporativo con un enlace único y seguro para cada destinatario seleccionado.
+      </div>
+      <div class="form-group">
+        <label class="form-label text-xs font-bold uppercase tracking-wider text-on-surface-variant/80">Plantilla de Encuesta</label>
+        <select class="form-input bg-surface-container-low cursor-pointer font-semibold" id="distTemplateId">
+          ${templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label text-xs font-bold uppercase tracking-wider text-on-surface-variant/80 mb-2 block">Destinatarios</label>
+        <div class="max-h-56 overflow-y-auto bg-surface-container-lowest rounded-2xl border border-outline-variant p-2 flex flex-col gap-1 shadow-sm custom-scrollbar">
+          ${stakeholders.map(s => `
+            <label class="flex items-center gap-3 p-3 hover:bg-surface-container-low cursor-pointer rounded-xl transition-colors border border-transparent hover:border-outline-variant/30 group">
+              <input type="checkbox" class="w-4 h-4 text-primary bg-surface border-outline-variant rounded focus:ring-primary cursor-pointer" value="${s.id}" checked>
+              <div class="flex flex-col flex-1">
+                <span class="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">${s.name} <span class="text-[10px] text-on-surface-variant uppercase ml-1">${s.role_title}</span></span>
+                <span class="text-[11px] text-on-surface-variant font-medium">${s.email}</span>
+              </div>
+              ${s.survey_status === 'Enviada' ? '<span class="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded uppercase tracking-widest">Ya enviada</span>' : ''}
+              ${s.survey_status === 'Respondida' ? '<span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase tracking-widest">Ya respondida</span>' : ''}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  
+  this.openModal('Distribuir Encuestas', html, `
+    <button class="btn btn-secondary font-bold" onclick="app.closeModal()">Cancelar</button>
+    <button class="btn btn-primary font-bold shadow-ambient flex items-center gap-2" onclick="app.distributeSurvey('${aid}')"><span class="material-symbols-outlined text-[18px]">send</span> Confirmar Envío</button>
+  `);
+};
+
+app.distributeSurvey = async function(aid) {
+  const template_id = document.getElementById('distTemplateId').value;
+  const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
+  const stakeholders = Array.from(checkboxes).map(cb => cb.value);
+  
+  if (stakeholders.length === 0) return this.toast('Debe seleccionar al menos un destinatario.', 'error');
+  
+  const btn = document.querySelector('#modalFooter .btn-primary');
+  if(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> Enviando...';
+  }
+  
+  const res = await this.post(`/api/audits/${aid}/distribute-survey`, { template_id, stakeholders });
+  if (res && res.status === 'success') {
+    this.toast('Encuestas enviadas exitosamente (Correos Simulados)');
+    this.closeModal();
+    this.loadAuditSurveySection(aid, false);
+  } else {
+    this.toast('Error al enviar encuestas', 'error');
+    if(btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">send</span> Confirmar Envío';
+    }
+  }
+};
+
+app.copySurveyLink = function(token) {
+  const url = window.location.origin + '/survey_fill.html?token=' + token;
+  navigator.clipboard.writeText(url).then(() => {
+    this.toast('Enlace copiado al portapapeles');
+  }).catch(err => {
+    this.toast('Error al copiar el enlace', 'error');
+  });
+};
+
+app.resendSurvey = async function(aid, sid) {
+  if (!confirm('¿Reenviar la encuesta a esta parte interesada?')) return;
+  const res = await this.post(`/api/audits/${aid}/stakeholders/${sid}/resend`, {});
+  if (res && res.status === 'success') {
+    this.toast('Encuesta reenviada exitosamente (Correo Simulado)');
+    this.loadAuditSurveySection(aid, false);
+  } else {
+    this.toast('Error al reenviar encuesta', 'error');
+  }
+};
+
+// ── Surveys Module (Standalone) ──
+app.surveysTab = 'dashboard';
+
+app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
+  if (updateKey !== null) {
+    if (!this.surveysFilters) this.surveysFilters = { area: '', year: '', status: '', search: '' };
+    this.surveysFilters[updateKey] = updateVal;
+  }
+  if (!this.surveysFilters) this.surveysFilters = { area: '', year: '', status: '', search: '' };
+  const sf = this.surveysFilters;
+  
+  const isR = this.user?.role === 'observador';
+  const body = document.getElementById('pageBody');
+  const tab = app.surveysTab || 'dashboard';
+  
+  document.getElementById('pageTitle').textContent = 'Encuestas de Satisfacción';
+  document.getElementById('pageSubtitle').textContent = 'Módulo Global';
+  document.getElementById('headerActions').innerHTML = '';
+
+  let tabsHTML = `
+    <div class="flex items-center gap-4 border-b border-outline-variant/60 pb-4 mb-8">
+      <button onclick="app.surveysTab='dashboard';app.renderSurveysModule()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='dashboard'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">📊 Dashboard</button>
+      <button onclick="app.surveysTab='history';app.renderSurveysModule()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='history'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">✉️ Historial de Envíos</button>
+      <button onclick="app.surveysTab='templates';app.renderSurveysModule()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='templates'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">📝 Plantillas</button>
+      ${this.user?.role === 'admin' ? `<button onclick="app.surveysTab='config';app.renderSurveysModule()" class="px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab==='config'?'bg-primary text-white shadow-ambient':'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}">⚙️ Configuración</button>` : ''}
+    </div>
+  `;
+  
+  let areas = [];
+  let areaFilterHTML = '';
+  if (['admin', 'gerente'].includes(this.user?.role) && (tab === 'dashboard' || tab === 'history')) {
+    areas = await this.get('/api/areas') || [];
+    areaFilterHTML = `
+      <div class="mb-6 flex justify-end">
+        <select class="form-input w-full md:w-64 !bg-surface-container-lowest border border-outline-variant/60 shadow-sm font-semibold text-sm" onchange="app.renderSurveysModule('area', this.value)">
+          <option value="">Todas las Áreas</option>
+          ${areas.map(a => `<option value="${a.id}" ${sf.area === a.id ? 'selected' : ''}>${a.name}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  }
+  
+  if (tab === 'dashboard') {
+    const data = await this.get('/api/surveys/dashboard' + (sf.area ? '?area_id=' + sf.area : ''));
+    const topQuestion = data?.question_ranking && data.question_ranking.length > 0 ? data.question_ranking[0] : null;
+    const bottomQuestion = data?.question_ranking && data.question_ranking.length > 0 ? data.question_ranking[data.question_ranking.length - 1] : null;
+    
+    const topGrade = topQuestion ? ((topQuestion.avg_score - 1) * 1.5 + 1).toFixed(1) : '-';
+    const bottomGrade = bottomQuestion ? ((bottomQuestion.avg_score - 1) * 1.5 + 1).toFixed(1) : '-';
+
+    const insightsHtml = data?.question_ranking && data.question_ranking.length > 0 ? `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="bg-surface-container-low p-8 rounded-[2rem] shadow-ambient border border-white/5">
+          <div class="flex items-center gap-3 mb-4 text-green-400">
+            <span class="material-symbols-outlined text-2xl bg-green-400/10 p-2 rounded-xl">thumb_up</span>
+            <h3 class="font-bold text-sm uppercase tracking-widest text-white/80">Aspecto Destacado</h3>
+          </div>
+          <div class="text-white font-bold text-lg leading-tight mb-6">"${topQuestion.question_text}"</div>
+          <div class="inline-flex items-center gap-2 bg-green-500/20 text-green-300 px-3 py-1.5 rounded-lg font-bold text-sm border border-green-500/20">Nota Promedio: ${topGrade}</div>
+        </div>
+        <div class="bg-surface-container-low p-8 rounded-[2rem] shadow-ambient border border-white/5">
+          <div class="flex items-center gap-3 mb-4 text-red-400">
+            <span class="material-symbols-outlined text-2xl bg-red-400/10 p-2 rounded-xl">trending_down</span>
+            <h3 class="font-bold text-sm uppercase tracking-widest text-white/80">Oportunidad de Mejora</h3>
+          </div>
+          <div class="text-white font-bold text-lg leading-tight mb-6">"${bottomQuestion.question_text}"</div>
+          <div class="inline-flex items-center gap-2 bg-red-500/20 text-red-300 px-3 py-1.5 rounded-lg font-bold text-sm border border-red-500/20">Nota Promedio: ${bottomGrade}</div>
+        </div>
+      </div>
+    ` : `
+      <div class="bg-surface-container-low p-8 rounded-[3rem] shadow-ambient text-center text-white/60 mt-6 border border-white/5">
+        <span class="material-symbols-outlined text-4xl mb-3">analytics</span>
+        <p class="text-sm">Aún no hay suficientes datos para generar indicadores de preguntas.</p>
+      </div>
+    `;
+
+    body.innerHTML = tabsHTML + areaFilterHTML + `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-surface-container-lowest p-8 rounded-[2rem] shadow-ambient flex flex-col justify-center items-center text-center">
+          <div class="w-14 h-14 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-4"><span class="material-symbols-outlined text-3xl">send</span></div>
+          <div class="text-4xl font-headline font-extrabold text-on-surface">${data?.total_sent || 0}</div>
+          <div class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60 mt-2">Enviadas</div>
+        </div>
+        <div class="bg-surface-container-lowest p-8 rounded-[2rem] shadow-ambient flex flex-col justify-center items-center text-center">
+          <div class="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-4"><span class="material-symbols-outlined text-3xl">task_alt</span></div>
+          <div class="text-4xl font-headline font-extrabold text-on-surface">${data?.total_completed || 0}</div>
+          <div class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60 mt-2">Respondidas (${data?.response_rate || 0}%)</div>
+        </div>
+        <div class="bg-surface-container-lowest p-8 rounded-[2rem] shadow-ambient flex flex-col justify-center items-center text-center">
+          <div class="w-14 h-14 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center mb-4"><span class="material-symbols-outlined text-3xl">star</span></div>
+          <div class="text-4xl font-headline font-extrabold text-on-surface">${data?.avg_score ? ((data.avg_score - 1) * 1.5 + 1).toFixed(1) : '1.0'}<span class="text-lg text-on-surface-variant/50">/7.0</span></div>
+          <div class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60 mt-2">Promedio General</div>
+        </div>
+      </div>
+      ${insightsHtml}
+    `;
+  } else if (tab === 'history') {
+    let yearOpts = '';
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear; y >= currentYear - 5; y--) {
+      yearOpts += `<option value="${y}" ${sf.year === y.toString() ? 'selected' : ''}>${y}</option>`;
+    }
+
+    const historyFilterHTML = `
+      <div class="mb-6 flex flex-wrap items-center gap-4 bg-surface-container-lowest p-4 rounded-2xl shadow-sm border border-outline-variant/30">
+        <div class="flex-1 min-w-[200px]">
+          <label class="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Buscar</label>
+          <input type="text" class="form-input w-full text-sm font-medium" placeholder="Auditoría o destinatario..." value="${sf.search || ''}" onchange="app.renderSurveysModule('search', this.value)">
+        </div>
+        ${['admin', 'gerente'].includes(this.user?.role) ? `
+        <div class="w-full md:w-48">
+          <label class="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Área</label>
+          <select class="form-input w-full text-sm font-medium" onchange="app.renderSurveysModule('area', this.value)">
+            <option value="">Todas</option>
+            ${areas.map(a => `<option value="${a.id}" ${sf.area === a.id ? 'selected' : ''}>${a.name}</option>`).join('')}
+          </select>
+        </div>` : ''}
+        <div class="w-full md:w-32">
+          <label class="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Año</label>
+          <select class="form-input w-full text-sm font-medium" onchange="app.renderSurveysModule('year', this.value)">
+            <option value="">Todos</option>
+            ${yearOpts}
+          </select>
+        </div>
+        <div class="w-full md:w-40">
+          <label class="block text-[11px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Estado</label>
+          <select class="form-input w-full text-sm font-medium" onchange="app.renderSurveysModule('status', this.value)">
+            <option value="">Todos</option>
+            <option value="Pendiente" ${sf.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+            <option value="Respondida" ${sf.status === 'Respondida' ? 'selected' : ''}>Respondida</option>
+          </select>
+        </div>
+      </div>
+    `;
+
+    const qs = new URLSearchParams();
+    if(sf.area) qs.append('area_id', sf.area);
+    if(sf.year) qs.append('year', sf.year);
+    if(sf.status) qs.append('status', sf.status);
+    if(sf.search) qs.append('search', sf.search);
+
+    const history = await this.get('/api/surveys/history?' + qs.toString()) || [];
+    body.innerHTML = tabsHTML + historyFilterHTML + `
+      <div class="bg-surface-container-low p-8 rounded-[3rem] shadow-ambient">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h3 class="text-xl font-headline font-extrabold text-white">Historial de Envíos</h3>
+            <p class="text-sm text-white/80 font-medium">Registro de todas las encuestas enviadas a auditados</p>
+          </div>
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-surface-variant text-on-surface-variant text-xs uppercase tracking-widest font-bold">
+                <th class="p-4 rounded-tl-2xl">Fecha Envío</th>
+                <th class="p-4">Auditoría / Área</th>
+                <th class="p-4">Destinatario</th>
+                <th class="p-4">Estado</th>
+                <th class="p-4">Nota</th>
+                <th class="p-4 rounded-tr-2xl text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody class="text-sm font-medium text-on-surface divide-y divide-outline-variant/30">
+              ${history.length === 0 ? '<tr><td colspan="6" class="p-8 text-center text-on-surface-variant/60">No hay encuestas enviadas.</td></tr>' :
+                history.map(h => {
+                  const isPending = h.status.toUpperCase() === 'PENDIENTE' || h.status.toUpperCase() === 'ENVIADA';
+                  const statusColor = isPending ? 'text-yellow-600 bg-yellow-100' : 'text-green-600 bg-green-100';
+                  
+                  const dDate = h.sent_at ? new Date(h.sent_at) : null;
+                  const dateStr = dDate ? this.fmtDate(h.sent_at) + " " + dDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                  
+                  return `
+                  <tr class="hover:bg-surface-variant/20 transition-colors">
+                    <td class="p-4">${dateStr}</td>
+                    <td class="p-4">
+                      <div class="font-bold">${h.audit_name}</div>
+                      <div class="text-xs text-on-surface-variant/60">${h.responsible_area || 'Sin área'}</div>
+                    </td>
+                    <td class="p-4">
+                      <div class="font-bold">${h.stakeholder_name}</div>
+                      <div class="text-xs text-on-surface-variant/60">${h.stakeholder_email}</div>
+                    </td>
+                    <td class="p-4">
+                      <span class="px-2 py-1 rounded-lg text-xs font-bold ${statusColor}">${h.status}</span>
+                    </td>
+                    <td class="p-4 font-bold text-sm">
+                      ${h.status.toUpperCase() === 'RESPONDIDA' && h.avg_score ? `<span class="text-green-700 bg-green-100 px-2 py-1 rounded">Nota ${((h.avg_score - 1) * 1.5 + 1).toFixed(1)}</span>` : '<span class="text-on-surface-variant/40">—</span>'}
+                    </td>
+                    <td class="p-4 text-center">
+                      ${isPending ? `<button class="text-primary hover:text-primary-container bg-primary/10 hover:bg-primary/20 p-2 rounded-xl transition-colors" onclick="app.resendGlobalSurvey('${h.id}')" title="Reenviar Correo"><span class="material-symbols-outlined text-[18px]">forward_to_inbox</span></button>` : `<div class="flex flex-col items-center gap-1"><span class="text-on-surface-variant/40 text-[10px] uppercase font-bold tracking-widest">Respondida<br>${this.fmtDate(h.responded_at)} ${new Date(h.responded_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span><button class="text-primary text-[10px] uppercase font-bold hover:underline" onclick="app.showSurveyResultsModal('${h.audit_id}')">Ver Detalle</button></div>`}
+                    </td>
+                  </tr>`;
+                }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } else if (tab === 'templates') {
+    const sTemplates = await this.get('/api/survey-templates') || [];
+    document.getElementById('headerActions').innerHTML = `
+      <button class="bg-primary text-white font-bold px-6 py-2 rounded-xl text-sm hover:opacity-90 transition-all shadow-sm flex items-center gap-2" onclick="app.showEditSurveyTemplateModal()">
+        <span class="material-symbols-outlined text-[18px]">add</span> Nueva Plantilla
+      </button>
+    `;
+    body.innerHTML = tabsHTML + `
+      <div class="bg-surface-container-low p-8 rounded-[3rem] shadow-ambient">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h3 class="text-xl font-headline font-extrabold text-white">Plantillas de Encuestas</h3>
+            <p class="text-sm text-white/80 font-medium">Configura las plantillas institucionales para encuestas de satisfacción</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          ${sTemplates.length === 0 ? '<div class="col-span-full py-10 text-center text-white/60">No hay plantillas de encuestas registradas</div>' :
+          sTemplates.map(st => `
+            <div class="bg-surface-container-lowest p-8 rounded-[2.5rem] shadow-ambient border border-transparent flex flex-col gap-6 group hover:scale-[1.01] transition-all relative">
+              <div class="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                 <button class="w-10 h-10 rounded-full bg-surface-container-low hover:bg-primary hover:text-white flex items-center justify-center text-on-surface transition-all shadow-sm" onclick="app.showEditSurveyTemplateModal('${st.id}')" title="Editar"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                 <button class="w-10 h-10 rounded-full bg-error-container/30 hover:bg-error hover:text-white flex items-center justify-center text-error transition-all shadow-sm" onclick="app.deleteSurveyTemplate('${st.id}')" title="Eliminar"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+              </div>
+              <div class="flex items-center gap-4 pr-24">
+                <div class="w-14 h-14 rounded-[1.5rem] bg-surface-container-low text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all shadow-sm flex-shrink-0">
+                  <span class="material-symbols-outlined text-[24px]">assignment</span>
+                </div>
+                <div>
+                  <div class="text-xl font-headline font-extrabold text-on-surface leading-tight group-hover:text-primary transition-colors">${st.name}</div>
+                  <div class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40 mt-1">${this.fmtDate(st.created_at)}</div>
+                </div>
+              </div>
+              <div class="text-sm font-medium text-on-surface-variant/60 leading-relaxed line-clamp-2">${st.description || 'Sin descripción'}</div>
+              <div class="mt-auto pt-6 border-t border-outline-variant/30 flex justify-end">
+                <button class="bg-surface-container-low hover:bg-primary hover:text-white text-primary px-6 py-3 rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-2" onclick="app.renderSurveyBuilder('${st.id}')">
+                   <span class="material-symbols-outlined text-[18px]">tune</span> Configurar Preguntas
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else if (tab === 'config' && this.user?.role === 'admin') {
+    const s = await this.get('/api/settings/survey') || {};
+    body.innerHTML = tabsHTML + `
+      <div class="bg-surface-container-low p-8 rounded-[3rem] shadow-ambient max-w-4xl mx-auto">
+        <div class="mb-8 border-b border-outline-variant/30 pb-6">
+          <h3 class="text-2xl font-headline font-extrabold text-white">Configuración de Envío de Correos</h3>
+          <p class="text-sm text-white/70 mt-2">Configura el servidor SMTP y la plantilla del correo que le llegará al auditado.</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <div class="space-y-4">
+            <h4 class="text-lg font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined">dns</span> Servidor SMTP</h4>
+            <div class="form-group">
+              <label class="form-label text-white/80">Host SMTP</label>
+              <input type="text" id="smtpHost" class="form-input bg-surface-container-lowest" value="${s.smtp_host || ''}" placeholder="ej. smtp.office365.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label text-white/80">Puerto SMTP</label>
+              <input type="number" id="smtpPort" class="form-input bg-surface-container-lowest" value="${s.smtp_port || '587'}">
+            </div>
+          </div>
+          <div class="space-y-4">
+            <h4 class="text-lg font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined">lock</span> Credenciales</h4>
+            <div class="form-group">
+              <label class="form-label text-white/80">Usuario / Correo Emisor</label>
+              <input type="text" id="smtpUser" class="form-input bg-surface-container-lowest" value="${s.smtp_user || ''}">
+            </div>
+            <div class="form-group">
+              <label class="form-label text-white/80">Contraseña</label>
+              <input type="password" id="smtpPass" class="form-input bg-surface-container-lowest" value="${s.smtp_pass || ''}" placeholder="Dejar en blanco para no cambiar">
+            </div>
+          </div>
+        </div>
+        
+        <div class="space-y-4 mb-8">
+          <h4 class="text-lg font-bold text-primary flex items-center gap-2"><span class="material-symbols-outlined">mark_email_unread</span> Plantilla de Correo</h4>
+          <div class="bg-surface-variant/30 p-4 rounded-xl text-xs text-white/70 mb-4 border border-outline-variant/30">
+            <strong>Variables dinámicas permitidas:</strong><br>
+            <code class="text-primary bg-primary/10 px-1 rounded">{{audit_name}}</code> : Nombre de la Auditoría<br>
+            <code class="text-primary bg-primary/10 px-1 rounded">{{evaluator_name}}</code> : Nombre del Destinatario<br>
+            <code class="text-primary bg-primary/10 px-1 rounded">{{link}}</code> : URL segura para responder la encuesta
+          </div>
+          <div class="form-group">
+            <label class="form-label text-white/80">Asunto del Correo</label>
+            <input type="text" id="emailSubject" class="form-input bg-surface-container-lowest" value="${s.survey_email_subject || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label text-white/80">Cuerpo del Correo</label>
+            <textarea id="emailBody" class="form-input bg-surface-container-lowest min-h-[150px] font-mono text-sm">${s.survey_email_body || ''}</textarea>
+          </div>
+        </div>
+        
+        <div class="flex justify-end pt-6 border-t border-outline-variant/30">
+          <button class="bg-primary hover:bg-primary-container hover:text-on-primary-container text-white px-8 py-3 rounded-xl font-bold shadow-ambient transition-all flex items-center gap-2" onclick="app.saveSurveyConfig()">
+            <span class="material-symbols-outlined text-[20px]">save</span> Guardar Configuración
+          </button>
+        </div>
+      </div>
+    `;
+  }
+};
+
+app.saveSurveyConfig = async function() {
+  const payload = {
+    smtp_host: document.getElementById('smtpHost').value.trim(),
+    smtp_port: document.getElementById('smtpPort').value.trim(),
+    smtp_user: document.getElementById('smtpUser').value.trim(),
+    smtp_pass: document.getElementById('smtpPass').value.trim(),
+    survey_email_subject: document.getElementById('emailSubject').value.trim(),
+    survey_email_body: document.getElementById('emailBody').value.trim()
+  };
+  const res = await this.post('/api/settings/survey', payload);
+  if (res && res.status === 'success') {
+    this.toast("Configuración guardada exitosamente");
+    this.renderSurveysModule();
+  } else {
+    this.toast(res?.error || "Error al guardar configuración", "error");
+  }
+};
+
+app.resendGlobalSurvey = async function(did) {
+  if (!confirm("¿Reenviar el correo de esta encuesta?")) return;
+  const res = await this.post(`/api/surveys/${did}/resend`);
+  if (res && res.status === 'success') {
+    this.toast("Encuesta reenviada exitosamente");
+    this.renderSurveysModule();
+  } else {
+    this.toast(res?.message || "Error al reenviar la encuesta", "error");
+  }
 };

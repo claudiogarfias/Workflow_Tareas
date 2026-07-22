@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encuesta de Satisfacción Post-Auditoría - Contraloría Interna</title>
+    <style>
+        :root {
+            --primary: #1e3a8a; --primary-hover: #1d4ed8;
+            --bg-light: #f8fafc; --border: #cbd5e1;
+            --score-5: #16a34a; --score-4: #22c55e; --score-3: #eab308;
+            --score-2: #f97316; --score-1: #ef4444;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #f1f5f9; margin: 0; padding: 20px; color: #1e293b;
+        }
+        .container {
+            max-width: 850px; margin: 0 auto; background: #ffffff;
+            border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+            overflow: hidden; border: 1px solid #e2e8f0;
+        }
+        .header { background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); color: #ffffff; padding: 30px; }
+        .header h1 { margin: 0 0 8px 0; font-size: 24px; font-weight: 700; }
+        .header p { margin: 0; opacity: 0.85; font-size: 14px; }
+        .meta-bar { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 15px 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; font-size: 13px; }
+        .meta-item strong { color: #64748b; display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .meta-item span { color: #0f172a; font-weight: 600; font-size: 14px; }
+        .content { padding: 30px; }
+        .instructions { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 14px 18px; border-radius: 4px; font-size: 13px; color: #1e40af; margin-bottom: 30px; line-height: 1.5; }
+        .question-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; transition: border-color 0.2s; }
+        .question-card:hover { border-color: #cbd5e1; }
+        .question-title { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 15px; display: flex; gap: 10px; }
+        .question-num { background: #e2e8f0; color: #475569; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+        .options-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .option-btn { border: 2px solid #e2e8f0; background: #fff; border-radius: 6px; padding: 10px; text-align: center; cursor: pointer; font-size: 12px; font-weight: 600; color: #475569; transition: all 0.2s ease; user-select: none; }
+        .option-btn:hover { border-color: #94a3b8; background: #f8fafc; }
+        .option-btn.selected[data-score="5"] { background: #dcfce7; border-color: var(--score-5); color: #15803d; }
+        .option-btn.selected[data-score="4"] { background: #f0fdf4; border-color: var(--score-4); color: #166534; }
+        .option-btn.selected[data-score="3"] { background: #fef9c3; border-color: var(--score-3); color: #854d0e; }
+        .option-btn.selected[data-score="2"] { background: #ffedd5; border-color: var(--score-2); color: #9a3412; }
+        .option-btn.selected[data-score="1"] { background: #fee2e2; border-color: var(--score-1); color: #991b1b; }
+        .comment-box { display: none; margin-top: 12px; animation: fadeIn 0.3s ease; }
+        .comment-box label { display: block; font-size: 12px; font-weight: 600; color: #b91c1c; margin-bottom: 6px; }
+        .comment-box textarea { width: 100%; box-sizing: border-box; border: 1px solid #fca5a5; border-radius: 6px; padding: 10px; font-family: inherit; font-size: 13px; background: #fff5f5; resize: vertical; min-height: 60px; }
+        .text-question textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; font-family: inherit; font-size: 13px; resize: vertical; min-height: 80px; }
+        .submit-section { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+        .btn-submit { background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: white; border: none; padding: 14px 40px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); transition: transform 0.1s, box-shadow 0.2s; }
+        .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4); }
+        .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        #loadingMsg, #successMsg, #errorMsg { text-align: center; padding: 50px; font-size: 18px; }
+        #successMsg { color: #16a34a; display: none; }
+        #errorMsg { color: #ef4444; display: none; }
+        #surveyContainer { display: none; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Cuestionario Post-Auditoría Interna</h1>
+            <p>Gerencia de Contraloría - CCAF Los Héroes</p>
+        </div>
+
+        <div id="loadingMsg">Cargando encuesta... por favor espere.</div>
+        
+        <div id="errorMsg">
+            <h2>Enlace Inválido o Expirado</h2>
+            <p>La encuesta solicitada no existe, ha expirado o ya fue respondida anteriormente.</p>
+        </div>
+
+        <div id="successMsg">
+            <h2>¡Muchas gracias por su tiempo!</h2>
+            <p>Sus respuestas han sido registradas exitosamente. Su retroalimentación es fundamental para la mejora continua de nuestro equipo de Contraloría.</p>
+        </div>
+
+        <div id="surveyContainer">
+            <div class="meta-bar">
+                <div class="meta-item">
+                    <strong>Auditoría</strong>
+                    <span id="auditName">...</span>
+                </div>
+                <div class="meta-item">
+                    <strong>Evaluador</strong>
+                    <span id="evaluatorName">...</span>
+                </div>
+                <div class="meta-item">
+                    <strong>Cargo / Rol</strong>
+                    <span id="evaluatorRole">...</span>
+                </div>
+            </div>
+
+            <div class="content">
+                <div class="instructions">
+                    💡 <strong>Instrucciones:</strong> Seleccione el nivel de acuerdo para cada afirmación. En caso de realizar una evaluación baja, se habilitará una casilla para justificar brevemente su respuesta.
+                </div>
+
+                <form id="surveyForm" onsubmit="submitSurvey(event)">
+                    <div id="questionsList"></div>
+                    <div class="submit-section">
+                        <button type="submit" class="btn-submit" id="submitBtn">Enviar Respuestas ➔</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        let questionsData = [];
+
+        async function loadSurvey() {
+            if (!token) {
+                showError();
+                return;
+            }
+            try {
+                const res = await fetch(`/api/public/survey/${token}`);
+                if (res.status === 404) { showError(); return; }
+                const data = await res.json();
+                if (data.status === 'Respondida') { showError(); return; }
+                
+                document.getElementById('auditName').innerText = data.audit_name;
+                document.getElementById('evaluatorName').innerText = data.evaluator_name;
+                document.getElementById('evaluatorRole').innerText = data.evaluator_role;
+                questionsData = data.questions;
+                renderQuestions();
+                
+                document.getElementById('loadingMsg').style.display = 'none';
+                document.getElementById('surveyContainer').style.display = 'block';
+            } catch (e) {
+                showError();
+            }
+        }
+
+        function renderQuestions() {
+            const container = document.getElementById('questionsList');
+            container.innerHTML = '';
+            
+            questionsData.forEach((q, idx) => {
+                const qNum = idx + 1;
+                const div = document.createElement('div');
+                
+                if (q.question_type === 'text' || q.question_type === 'texto') {
+                    div.className = 'question-card text-question';
+                    div.innerHTML = `
+                        <div class="question-title"><span class="question-num">${qNum}</span> ${q.question_text}</div>
+                        <textarea id="comment_${q.id}" placeholder="Ingrese sus comentarios..."></textarea>
+                    `;
+                } else {
+                    div.className = 'question-card scale-question';
+                    div.setAttribute('data-qid', q.id);
+                    div.setAttribute('data-req', q.require_comment_if_below);
+                    
+                    div.innerHTML = `
+                        <div class="question-title"><span class="question-num">${qNum}</span> ${q.question_text}</div>
+                        <div class="options-grid">
+                            <div class="option-btn" data-score="5" onclick="selectScore('${q.id}', 5)">Muy de acuerdo</div>
+                            <div class="option-btn" data-score="4" onclick="selectScore('${q.id}', 4)">De acuerdo</div>
+                            <div class="option-btn" data-score="3" onclick="selectScore('${q.id}', 3)">Ni de acuerdo, ni en desacuerdo</div>
+                            <div class="option-btn" data-score="2" onclick="selectScore('${q.id}', 2)">En desacuerdo</div>
+                            <div class="option-btn" data-score="1" onclick="selectScore('${q.id}', 1)">Muy en desacuerdo</div>
+                        </div>
+                        <div class="comment-box" id="cbox_${q.id}">
+                            <label>⚠️ Justificación requerida:</label>
+                            <textarea id="comment_${q.id}" placeholder="Por favor explique su respuesta..."></textarea>
+                        </div>
+                        <input type="hidden" id="score_${q.id}" value="">
+                    `;
+                }
+                container.appendChild(div);
+            });
+        }
+
+        window.selectScore = function(qid, score) {
+            document.getElementById(`score_${qid}`).value = score;
+            const card = document.querySelector(`.question-card[data-qid="${qid}"]`);
+            const req = parseFloat(card.getAttribute('data-req') || 2.0);
+            
+            card.querySelectorAll('.option-btn').forEach(btn => btn.classList.remove('selected'));
+            card.querySelector(`.option-btn[data-score="${score}"]`).classList.add('selected');
+
+            const commentBox = document.getElementById(`cbox_${qid}`);
+            if (commentBox) {
+                if (score <= req) {
+                    commentBox.style.display = 'block';
+                } else {
+                    commentBox.style.display = 'none';
+                    document.getElementById(`comment_${qid}`).value = '';
+                }
+            }
+        };
+
+        function showError() {
+            document.getElementById('loadingMsg').style.display = 'none';
+            document.getElementById('surveyContainer').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'block';
+        }
+
+        window.submitSurvey = async function(e) {
+            e.preventDefault();
+            
+            const responses = [];
+            for (let q of questionsData) {
+                let textVal = document.getElementById(`comment_${q.id}`) ? document.getElementById(`comment_${q.id}`).value : '';
+                if (q.question_type === 'scale' || q.question_type === 'escala') {
+                    let scoreVal = document.getElementById(`score_${q.id}`).value;
+                    if (scoreVal === '') {
+                        alert(`Por favor responda la pregunta: "${q.question_text}"`);
+                        return;
+                    }
+                    scoreVal = parseFloat(scoreVal);
+                    if (scoreVal <= q.require_comment_if_below && textVal.trim() === '') {
+                        alert(`Debe ingresar una justificación para la pregunta: "${q.question_text}"`);
+                        return;
+                    }
+                    responses.push({ question_id: q.id, score: scoreVal, comment: textVal });
+                } else {
+                    responses.push({ question_id: q.id, score: null, comment: textVal });
+                }
+            }
+            
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').innerText = 'Enviando...';
+            
+            try {
+                const res = await fetch(`/api/public/survey/${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ responses })
+                });
+                if (res.ok) {
+                    document.getElementById('surveyContainer').style.display = 'none';
+                    document.getElementById('successMsg').style.display = 'block';
+                } else {
+                    alert("Ocurrió un error al enviar la encuesta. Intente nuevamente.");
+                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('submitBtn').innerText = 'Enviar Respuestas ➔';
+                }
+            } catch (err) {
+                alert("Error de conexión.");
+                document.getElementById('submitBtn').disabled = false;
+            }
+        };
+
+        window.onload = loadSurvey;
+    </script>
+</body>
+</html>

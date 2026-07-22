@@ -6,6 +6,7 @@ import json
 import uuid
 from datetime import datetime, date, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from functools import wraps
 
 app = Flask(__name__, static_folder='static')
@@ -27,6 +28,10 @@ def check_auth():
             return jsonify({"status":"error", "message":"No autenticado"}), 401
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'workflow_tareas.db')
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'audits')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 # 50MB max-limit
 
 def get_db():
     conn = sqlite3.connect(DB_FILE)
@@ -59,19 +64,59 @@ def get_calculated_status(c, audit_id, db_status):
 def get_user_from_request():
     return session.get('username', request.headers.get('X-User', 'Sistema'))
 
+def log_activity(c, action, entity_type, entity_id, details=""):
+    try:
+        user = get_user_from_request()
+        now = datetime.now().isoformat()
+        c.execute('''
+            INSERT INTO activity_logs (id, user, action, entity_type, entity_id, details, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (gen_id(), user, action, entity_type, entity_id, details, now))
+    except Exception as e:
+        print("Error en log_activity:", e)
+
+@app.after_request
+def auto_log_activity(response):
+    try:
+        if request.method in ['POST', 'PUT', 'DELETE', 'PATCH'] and response.status_code < 400:
+            path = request.path
+            if path.startswith('/api/') and 'login' not in path and 'logout' not in path and 'recycle-bin' not in path:
+                action_map = {'POST': 'CREAR', 'PUT': 'MODIFICAR', 'PATCH': 'MODIFICAR', 'DELETE': 'ELIMINAR'}
+                action = action_map.get(request.method, request.method)
+                
+                parts = [p for p in path.strip('/').split('/') if p]
+                entity_type = parts[1].upper() if len(parts) >= 2 else 'SISTEMA'
+                
+                # Try to guess entity_id
+                entity_id = 'N/A'
+                if len(parts) > 2 and parts[-1] != parts[1]:
+                    entity_id = parts[-1]
+                
+                # Add context details if json is present
+                details = f"Endpoint: {path}"
+                if request.is_json and request.json:
+                    name = request.json.get('name') or request.json.get('title')
+                    if name:
+                        details += f" | Nombre: {name}"
+                        
+                conn = get_db()
+                c = conn.cursor()
+                log_activity(c, action, entity_type, entity_id, details)
+                conn.commit()
+                conn.close()
+    except Exception as e:
+        print("Auto log activity error:", e)
+    return response
+
 def append_auth_filter(q, params, table_alias='', audit_id_column='id', task_alias=None):
     role = session.get('role', 'auditor')
     if role in ('admin', 'gerente'):
         return q
     
     prefix = f"{table_alias}." if table_alias else ""
-    if role == 'jefe':
-        username = session.get('username')
-        q += f" AND {prefix}{audit_id_column} IN (SELECT audit_id FROM audit_areas WHERE area_id IN (SELECT area_id FROM user_areas WHERE username=?))"
-        params.append(username)
-    elif role == 'auditor':
+    if role in ('jefe', 'auditor'):
         linked = session.get('linked_auditors', [])
-        if not linked and session.get('full_name'):
+        if role == 'auditor' and not linked and session.get('full_name'):
             linked = [session.get('full_name')]
             
         if linked:
@@ -188,12 +233,65 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS task_categories (
         id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS audit_attachments (
+        id TEXT PRIMARY KEY, audit_id TEXT NOT NULL, filename TEXT NOT NULL,
+        filepath TEXT NOT NULL, size INTEGER, uploaded_by TEXT, uploaded_at TEXT,
+        FOREIGN KEY (audit_id) REFERENCES audits(id) ON DELETE CASCADE
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS activity_logs (
         id TEXT PRIMARY KEY, user TEXT NOT NULL, action TEXT NOT NULL,
         entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
         details TEXT, timestamp TEXT NOT NULL
     )''')
 
+    # Survey Module Tables
+    c.execute('''CREATE TABLE IF NOT EXISTS survey_templates (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, created_at TEXT, updated_at TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS survey_questions (
+        id TEXT PRIMARY KEY, template_id TEXT NOT NULL, question_text TEXT NOT NULL, 
+        question_type TEXT DEFAULT 'scale', weight REAL DEFAULT 1.0, 
+        require_comment_if_below REAL DEFAULT 2.0, order_num INTEGER DEFAULT 0,
+        FOREIGN KEY (template_id) REFERENCES survey_templates(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS audit_stakeholders (
+        id TEXT PRIMARY KEY, audit_id TEXT NOT NULL, name TEXT NOT NULL, 
+        email TEXT NOT NULL, role_title TEXT DEFAULT 'Auditado', created_at TEXT,
+        FOREIGN KEY (audit_id) REFERENCES audits(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS master_stakeholders (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, 
+        role_title TEXT NOT NULL, created_at TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS survey_dispatches (
+        id TEXT PRIMARY KEY, audit_id TEXT NOT NULL, template_id TEXT NOT NULL, 
+        stakeholder_id TEXT NOT NULL, token TEXT UNIQUE NOT NULL, 
+        status TEXT DEFAULT 'Enviada', sent_at TEXT, responded_at TEXT,
+        FOREIGN KEY (audit_id) REFERENCES audits(id) ON DELETE CASCADE,
+        FOREIGN KEY (template_id) REFERENCES survey_templates(id) ON DELETE CASCADE,
+        FOREIGN KEY (stakeholder_id) REFERENCES audit_stakeholders(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS survey_responses (
+        id TEXT PRIMARY KEY, dispatch_id TEXT NOT NULL, question_id TEXT NOT NULL, 
+        score REAL, comment TEXT, responded_at TEXT,
+        FOREIGN KEY (dispatch_id) REFERENCES survey_dispatches(id) ON DELETE CASCADE,
+        FOREIGN KEY (question_id) REFERENCES survey_questions(id) ON DELETE CASCADE
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS global_settings (
+        key TEXT PRIMARY KEY, value TEXT
+    )''')
+    
+    # Initialize default settings if empty
+    defaults = {
+        'smtp_host': 'smtp.office365.com',
+        'smtp_port': '587',
+        'smtp_user': '',
+        'smtp_pass': '',
+        'survey_email_subject': 'Encuesta de Satisfacción Post-Auditoría - {{audit_name}}',
+        'survey_email_body': 'Estimado(a) {{evaluator_name}},\n\nPor favor, responde la siguiente encuesta de satisfacción:\n{{link}}\n\nSaludos.'
+    }
+    for k, v in defaults.items():
+        c.execute("INSERT OR IGNORE INTO global_settings (key, value) VALUES (?, ?)", (k, v))
     # Migrations for existing DBs
     for col, dflt in [('order_num','0'),('category',"''"),('deleted_at',"NULL"),('weight','0.0')]:
         try: c.execute(f"ALTER TABLE audit_tasks ADD COLUMN {col} TEXT DEFAULT {dflt}")
@@ -206,6 +304,10 @@ def init_db():
         except: pass
     try: c.execute("ALTER TABLE users ADD COLUMN linked_auditors TEXT DEFAULT '[]'")
     except: pass
+    for col, dflt in [('is_required','1'), ('created_at',"NULL")]:
+        try: c.execute(f"ALTER TABLE survey_questions ADD COLUMN {col} INTEGER DEFAULT {dflt}")
+        except: pass
+
 
     # Admin seed
     c.execute('SELECT COUNT(*) FROM users')
@@ -264,6 +366,30 @@ def init_db():
             for j, (tname, tweight) in enumerate(stasks):
                 c.execute('INSERT INTO template_tasks (id, stage_id, name, description, order_num, weight) VALUES (?, ?, ?, ?, ?, ?)',
                           (gen_id(), sid, tname, "", j, tweight))
+
+    # Survey Templates seed
+    c.execute('SELECT COUNT(*) FROM survey_templates')
+    if c.fetchone()[0] == 0:
+        stid = gen_id()
+        now = datetime.now().isoformat()
+        c.execute('INSERT INTO survey_templates (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                  (stid, 'Cuestionario Post-Auditoría', 'Plantilla base institucional de encuestas', now, now))
+        
+        survey_data = [
+            ("¿Considera que la reunión de 'Kick Off' o 'Mail de Inicio de la Auditoría' fue clara respecto de los objetivos de la auditoría?", 'scale', 3.0, 2.0),
+            ("La auditoría se desarrolló de manera objetiva y profesional.", 'scale', 3.0, 2.0),
+            ("En el transcurso de la auditoría, ¿se mantuvo una comunicación permanente?", 'scale', 3.0, 2.0),
+            ("¿Se consideraron plazos suficientes para la entrega de información?", 'scale', 2.0, 2.0),
+            ("¿La comunicación de los resultados de la auditoría tuvo instancias para la revisión de ellos en forma oportuna?", 'scale', 1.0, 2.0),
+            ("El área tuvo el tiempo acordado para la entrega de respuestas.", 'scale', 3.0, 2.0),
+            ("¿La auditoría interna realizada en su proceso / área, aportó oportunidades de mejora para su gestión y operación?", 'scale', 2.0, 2.0),
+            ("¿Considera que existen aspectos positivos destacables?", 'text', 0.0, 0.0),
+            ("¿Considera que existen aspectos mejorables acerca de la auditoría interna?", 'text', 0.0, 0.0)
+        ]
+        
+        for idx, (qtext, qtype, qweight, qreq) in enumerate(survey_data):
+            c.execute('INSERT INTO survey_questions (id, template_id, question_text, question_type, weight, require_comment_if_below, order_num) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                      (gen_id(), stid, qtext, qtype, qweight, qreq, idx))
 
     # FIX missing categories based on (P), (E), (C) prefixes
     c.execute("UPDATE audit_tasks SET category = 'Etapa de Preparación' WHERE (category IS NULL OR category = '') AND (name LIKE '(P) %' OR name LIKE '(P)-%')")
@@ -518,6 +644,34 @@ def delete_area(aid):
         conn.commit(); conn.close(); return jsonify({"status":"success"})
     except Exception as e:
         conn.close(); return jsonify({"error": str(e)}), 400
+
+# ─── MASTER STAKEHOLDERS ─────────────────────────────────────────────────────
+
+@app.route('/api/master/stakeholders', methods=['GET'])
+def get_master_stakeholders():
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT * FROM master_stakeholders ORDER BY name')
+    r = [dict(x) for x in c.fetchall()]; conn.close(); return jsonify(r)
+
+@app.route('/api/master/stakeholders', methods=['POST'])
+def create_master_stakeholder():
+    p = request.json; conn = get_db(); c = conn.cursor(); sid = gen_id()
+    c.execute('INSERT INTO master_stakeholders (id, name, email, role_title, created_at) VALUES (?, ?, ?, ?, ?)',
+              (sid, p['name'], p['email'], p.get('role_title', 'Auditado'), datetime.now().isoformat()))
+    conn.commit(); conn.close(); return jsonify({"status":"success", "id": sid})
+
+@app.route('/api/master/stakeholders/<sid>', methods=['PUT'])
+def update_master_stakeholder(sid):
+    p = request.json; conn = get_db(); c = conn.cursor()
+    c.execute('UPDATE master_stakeholders SET name=?, email=?, role_title=? WHERE id=?',
+              (p['name'], p['email'], p.get('role_title', 'Auditado'), sid))
+    conn.commit(); conn.close(); return jsonify({"status":"success"})
+
+@app.route('/api/master/stakeholders/<sid>', methods=['DELETE'])
+def delete_master_stakeholder(sid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('DELETE FROM master_stakeholders WHERE id=?', (sid,))
+    conn.commit(); conn.close(); return jsonify({"status":"success"})
 
 # ─── PLANS ───────────────────────────────────────────────────────────────────
 
@@ -884,6 +1038,92 @@ def restore_template(aid):
     audit = c.fetchone()
     if not audit or not audit['template_id']:
         conn.close(); return jsonify({"error":"La auditoría no tiene plantilla asociada"}), 400
+
+# ─── AUDIT ATTACHMENTS ────────────────────────────────────────────────────────
+
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', '7z', 'rar', 'txt', 'csv'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/audits/<aid>/attachments', methods=['GET'])
+@login_required
+def get_audit_attachments(aid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT id, filename, size, uploaded_by, uploaded_at FROM audit_attachments WHERE audit_id=? ORDER BY uploaded_at DESC', (aid,))
+    attachments = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify(attachments)
+
+@app.route('/api/audits/<aid>/attachments', methods=['POST'])
+@login_required
+def upload_audit_attachment(aid):
+    if 'file' not in request.files:
+        return jsonify({"error": "No hay archivo"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No seleccionaste archivo"}), 400
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Tipo de archivo no permitido"}), 400
+        
+    filename = secure_filename(file.filename)
+    if not filename:
+        filename = f"file_{gen_id()}"
+        
+    att_id = gen_id()
+    # Save with unique name to prevent collisions
+    unique_filename = f"{att_id}_{filename}"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+    
+    try:
+        file.save(filepath)
+        size = os.path.getsize(filepath)
+    except Exception as e:
+        return jsonify({"error": f"Error al guardar: {str(e)}"}), 500
+        
+    user = get_user_from_request()
+    now = datetime.now().isoformat()
+    
+    conn = get_db(); c = conn.cursor()
+    c.execute('INSERT INTO audit_attachments (id, audit_id, filename, filepath, size, uploaded_by, uploaded_at) VALUES (?,?,?,?,?,?,?)',
+              (att_id, aid, filename, unique_filename, size, user, now))
+    log_activity(c, 'SUBIR ADJUNTO', 'Auditoría', aid, f"Archivo: {filename}")
+    conn.commit(); conn.close()
+    return jsonify({"status": "success", "id": att_id, "filename": filename})
+
+@app.route('/api/attachments/<att_id>', methods=['DELETE'])
+@login_required
+def delete_attachment(att_id):
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT filepath, audit_id FROM audit_attachments WHERE id=?', (att_id,))
+    att = c.fetchone()
+    if not att:
+        conn.close(); return jsonify({"error": "Adjunto no encontrado"}), 404
+        
+    try:
+        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], att['filepath']))
+    except OSError:
+        pass # Ignorar si no existe en disco
+        
+    c.execute('DELETE FROM audit_attachments WHERE id=?', (att_id,))
+    log_activity(c, 'ELIMINAR ADJUNTO', 'Auditoría', att['audit_id'], f"Adjunto ID: {att_id}")
+    conn.commit(); conn.close()
+    return jsonify({"status": "success"})
+
+@app.route('/api/attachments/<att_id>/download', methods=['GET'])
+def download_attachment(att_id):
+    # No @login_required here so window.open works easily without passing tokens if using cookies (which we are)
+    # But for security, better to check session manually
+    if 'username' not in session:
+        return "No autenticado", 401
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT filename, filepath FROM audit_attachments WHERE id=?', (att_id,))
+    att = c.fetchone()
+    conn.close()
+    if not att:
+        return "Adjunto no encontrado", 404
+        
+    return send_from_directory(app.config['UPLOAD_FOLDER'], att['filepath'], as_attachment=True, download_name=att['filename'])
         
     audit_dict = dict(audit)
     audit_resp = audit_dict.get('responsible', '')
@@ -1306,7 +1546,479 @@ def get_activity_logs():
     logs = [dict(r) for r in c.fetchall()]
     conn.close(); return jsonify(logs)
 
+# ─── SATISFACTION SURVEYS (V2.0) ─────────────────────────────────────────────
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def send_survey_email(to_email, name, audit_name, token):
+    app_url = f"http://localhost:5001/static/survey_fill.html?token={token}"
+    
+    conn = get_db(); c = conn.cursor()
+    c.execute("SELECT key, value FROM global_settings")
+    settings = {row['key']: row['value'] for row in c.fetchall()}
+    conn.close()
+    
+    subject = settings.get('survey_email_subject', 'Encuesta de Satisfacción Post-Auditoría - {{audit_name}}')
+    body = settings.get('survey_email_body', 'Estimado(a) {{evaluator_name}},\n\nPor favor, responde la siguiente encuesta de satisfacción:\n{{link}}\n\nSaludos.')
+    
+    subject = subject.replace('{{audit_name}}', audit_name).replace('{{evaluator_name}}', name).replace('{{link}}', app_url)
+    body = body.replace('{{audit_name}}', audit_name).replace('{{evaluator_name}}', name).replace('{{link}}', app_url)
+    
+    smtp_host = settings.get('smtp_host', '')
+    smtp_port = settings.get('smtp_port', '587')
+    smtp_user = settings.get('smtp_user', '')
+    smtp_pass = settings.get('smtp_pass', '')
+    
+    if not smtp_host or not smtp_user or not smtp_pass:
+        print(f"\n[CORREO SIMULADO - SMTP NO CONFIGURADO] Enviando a: {to_email}")
+        print(f"Asunto: {subject}")
+        print(f"Cuerpo:\n{body}\n")
+        return
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(smtp_host, int(smtp_port))
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+        print(f"[CORREO REAL] Enviado con éxito a {to_email}")
+    except Exception as e:
+        print(f"[ERROR SMTP] No se pudo enviar el correo a {to_email}: {e}")
+        # Opcional: Fallback a simulado
+        print(f"\n[CORREO SIMULADO - FALLBACK] Asunto: {subject}\nEnlace: {app_url}\n")
+
+@app.route('/api/survey-templates', methods=['GET'])
+def get_survey_templates():
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT * FROM survey_templates ORDER BY created_at DESC')
+    r = [dict(x) for x in c.fetchall()]; conn.close(); return jsonify(r)
+
+@app.route('/api/survey-templates', methods=['POST'])
+def create_survey_template():
+    p = request.json; conn = get_db(); c = conn.cursor(); tid = gen_id(); now = datetime.now().isoformat()
+    c.execute('INSERT INTO survey_templates (id, name, description, created_at) VALUES (?, ?, ?, ?)',
+              (tid, p.get('name', 'Nueva Plantilla'), p.get('description', ''), now))
+    conn.commit(); conn.close(); return jsonify({"status": "success", "id": tid})
+
+@app.route('/api/survey-templates/<tid>', methods=['PUT'])
+def update_survey_template(tid):
+    p = request.json; conn = get_db(); c = conn.cursor()
+    c.execute('UPDATE survey_templates SET name=?, description=? WHERE id=?',
+              (p.get('name'), p.get('description'), tid))
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/survey-templates/<tid>', methods=['DELETE'])
+def delete_survey_template(tid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('DELETE FROM survey_templates WHERE id=?', (tid,))
+    c.execute('DELETE FROM survey_questions WHERE template_id=?', (tid,))
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/survey-templates/<tid>', methods=['GET'])
+def get_survey_template_details(tid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT * FROM survey_templates WHERE id=?', (tid,))
+    t = c.fetchone()
+    if not t: conn.close(); return jsonify({"error": "No encontrado"}), 404
+    t_dict = dict(t)
+    c.execute('SELECT * FROM survey_questions WHERE template_id=? ORDER BY order_num', (tid,))
+    
+    questions = []
+    for q in c.fetchall():
+        q_dict = dict(q)
+        q_dict['requires_justification_below'] = q_dict.get('require_comment_if_below')
+        questions.append(q_dict)
+    
+    t_dict['questions'] = questions
+    conn.close(); return jsonify(t_dict)
+
+@app.route('/api/survey-templates/<tid>/questions', methods=['PUT'])
+def update_survey_template_questions(tid):
+    questions = request.json.get('questions', [])
+    conn = get_db(); c = conn.cursor(); now = datetime.now().isoformat()
+    c.execute('DELETE FROM survey_questions WHERE template_id=?', (tid,))
+    for idx, q in enumerate(questions):
+        qid = gen_id()
+        c.execute('''
+            INSERT INTO survey_questions 
+            (id, template_id, question_text, question_type, order_num, is_required, 
+             require_comment_if_below, weight, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            qid, tid, q.get('question_text', ''), q.get('question_type', 'escala'),
+            idx, 1 if q.get('is_required', True) else 0,
+            q.get('requires_justification_below'),
+            q.get('weight', 1.0),
+            now
+        ))
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/audits/<aid>/survey-results', methods=['GET'])
+def get_audit_survey_results(aid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('''
+        SELECT 
+            s.id, s.name, s.email, s.role_title,
+            (SELECT status FROM survey_dispatches WHERE stakeholder_id = s.id AND audit_id = ? ORDER BY sent_at DESC LIMIT 1) as status,
+            (SELECT sent_at FROM survey_dispatches WHERE stakeholder_id = s.id AND audit_id = ? ORDER BY sent_at DESC LIMIT 1) as sent_at
+        FROM audit_stakeholders s WHERE audit_id = ?
+    ''', (aid, aid, aid))
+    stakeholders = [dict(x) for x in c.fetchall()]
+    
+    total = len(stakeholders)
+    sent_list = [s for s in stakeholders if s['status'] in ('Enviada', 'Respondida')]
+    responded_list = [s for s in stakeholders if s['status'] == 'Respondida']
+    pending_list = [s for s in stakeholders if s['status'] == 'Enviada']
+    
+    now = datetime.now()
+    for s in pending_list:
+        if s['sent_at']:
+            sent_date = datetime.fromisoformat(s['sent_at'].replace('Z', '+00:00') if 'Z' in s['sent_at'] else s['sent_at'])
+            s['days_pending'] = (now - sent_date.replace(tzinfo=None)).days
+        else:
+            s['days_pending'] = 0
+            
+    c.execute('''
+        SELECT d.id as dispatch_id, s.name, s.role_title, r.question_id, r.score, r.comment, r.responded_at, q.question_text, q.question_type
+        FROM survey_responses r
+        JOIN survey_dispatches d ON r.dispatch_id = d.id
+        JOIN audit_stakeholders s ON d.stakeholder_id = s.id
+        JOIN survey_questions q ON r.question_id = q.id
+        WHERE d.audit_id = ?
+        ORDER BY d.id, q.order_num ASC
+    ''', (aid,))
+    raw_responses = c.fetchall()
+    
+    responses_dict = {}
+    for row in raw_responses:
+        did = row['dispatch_id']
+        if did not in responses_dict:
+            responses_dict[did] = {
+                "stakeholder": row['name'],
+                "role": row['role_title'],
+                "created_at": row['responded_at'],
+                "data": []
+            }
+            
+        responses_dict[did]["data"].append({
+            "question": row['question_text'],
+            "type": row['question_type'],
+            "value": row['score'] if row['question_type'] in ('escala', 'scale') else row['comment'],
+            "justification": row['comment'] if row['question_type'] in ('escala', 'scale') else ""
+        })
+    
+    responses = list(responses_dict.values())
+    conn.close()
+    return jsonify({
+        "stats": {
+            "total_stakeholders": total,
+            "total_sent": len(sent_list),
+            "total_responded": len(responded_list),
+            "total_pending": len(pending_list)
+        },
+        "pending_details": pending_list,
+        "responses": responses
+    })
+
+@app.route('/api/audits/<aid>/stakeholders', methods=['GET'])
+def get_audit_stakeholders(aid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('''
+        SELECT s.*, 
+               (SELECT status FROM survey_dispatches WHERE stakeholder_id = s.id AND audit_id = ? ORDER BY sent_at DESC LIMIT 1) as survey_status,
+               (SELECT token FROM survey_dispatches WHERE stakeholder_id = s.id AND audit_id = ? ORDER BY sent_at DESC LIMIT 1) as survey_token,
+               (SELECT sent_at FROM survey_dispatches WHERE stakeholder_id = s.id AND audit_id = ? ORDER BY sent_at DESC LIMIT 1) as last_sent,
+               (SELECT AVG(CAST(r.score AS FLOAT)) FROM survey_responses r JOIN survey_dispatches d2 ON r.dispatch_id = d2.id JOIN survey_questions q ON r.question_id = q.id WHERE d2.stakeholder_id = s.id AND d2.audit_id = ? AND q.question_type IN ('escala', 'scale')) as avg_score
+        FROM audit_stakeholders s WHERE audit_id = ? ORDER BY created_at DESC
+    ''', (aid, aid, aid, aid, aid))
+    r = [dict(x) for x in c.fetchall()]; conn.close(); return jsonify(r)
+
+@app.route('/api/audits/<aid>/stakeholders', methods=['POST'])
+def add_audit_stakeholder(aid):
+    p = request.json; conn = get_db(); c = conn.cursor(); sid = gen_id(); now = datetime.now().isoformat()
+    c.execute('INSERT INTO audit_stakeholders (id, audit_id, name, email, role_title, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+              (sid, aid, p['name'], p['email'], p.get('role_title', 'Auditado'), now))
+    conn.commit(); conn.close(); return jsonify({"status": "success", "id": sid})
+
+@app.route('/api/audits/<aid>/stakeholders/<sid>', methods=['DELETE'])
+def delete_audit_stakeholder(aid, sid):
+    conn = get_db(); c = conn.cursor()
+    c.execute('DELETE FROM audit_stakeholders WHERE id=?', (sid,))
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/audits/<aid>/distribute-survey', methods=['POST'])
+def distribute_survey(aid):
+    p = request.json; conn = get_db(); c = conn.cursor(); now = datetime.now().isoformat()
+    stakeholder_ids = p.get('stakeholders', []); template_id = p.get('template_id')
+    if not template_id or not stakeholder_ids: return jsonify({"error": "Faltan datos"}), 400
+    
+    c.execute('SELECT name FROM audits WHERE id=?', (aid,)); audit_row = c.fetchone()
+    if not audit_row: return jsonify({"error": "Auditoría no encontrada"}), 404
+    
+    for sid in stakeholder_ids:
+        c.execute('SELECT name, email FROM audit_stakeholders WHERE id=?', (sid,)); stk = c.fetchone()
+        if stk:
+            token = str(uuid.uuid4()); did = gen_id()
+            c.execute('INSERT INTO survey_dispatches (id, audit_id, template_id, stakeholder_id, token, status, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                      (did, aid, template_id, sid, token, 'Enviada', now))
+            send_survey_email(stk['email'], stk['name'], audit_row['name'], token)
+            
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/audits/<aid>/stakeholders/<sid>/resend', methods=['POST'])
+def resend_survey(aid, sid):
+    conn = get_db(); c = conn.cursor(); now = datetime.now().isoformat()
+    c.execute('SELECT name FROM audits WHERE id=?', (aid,)); audit_row = c.fetchone()
+    if not audit_row: return jsonify({"error": "Auditoría no encontrada"}), 404
+    
+    c.execute('SELECT * FROM survey_dispatches WHERE stakeholder_id=? AND audit_id=? ORDER BY sent_at DESC LIMIT 1', (sid, aid))
+    last_dispatch = c.fetchone()
+    if not last_dispatch: return jsonify({"error": "No hay envío previo"}), 400
+    
+    c.execute('SELECT name, email FROM audit_stakeholders WHERE id=?', (sid,)); stk = c.fetchone()
+    if stk:
+        send_survey_email(stk['email'], stk['name'], audit_row['name'], last_dispatch['token'])
+        c.execute('UPDATE survey_dispatches SET sent_at=? WHERE id=?', (now, last_dispatch['id']))
+        
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/public/survey/<token>', methods=['GET'])
+def get_public_survey(token):
+    conn = get_db(); c = conn.cursor()
+    c.execute('SELECT * FROM survey_dispatches WHERE token=?', (token,)); d = c.fetchone()
+    if not d: conn.close(); return jsonify({"error": "Enlace inválido o caducado"}), 404
+    if d['status'] == 'Respondida': conn.close(); return jsonify({"status": "Respondida"})
+    
+    c.execute('SELECT name, auditors FROM audits WHERE id=?', (d['audit_id'],)); a = c.fetchone()
+    c.execute('SELECT * FROM survey_questions WHERE template_id=? ORDER BY order_num', (d['template_id'],)); qs = [dict(q) for q in c.fetchall()]
+    c.execute('SELECT name, role_title FROM audit_stakeholders WHERE id=?', (d['stakeholder_id'],)); stk = c.fetchone()
+    conn.close()
+    return jsonify({"audit_name": a['name'], "evaluator_name": stk['name'], "evaluator_role": stk['role_title'], "questions": qs, "dispatch_id": d['id']})
+
+@app.route('/api/public/survey/<token>', methods=['POST'])
+def submit_public_survey(token):
+    p = request.json; conn = get_db(); c = conn.cursor(); now = datetime.now().isoformat()
+    c.execute('SELECT * FROM survey_dispatches WHERE token=?', (token,)); d = c.fetchone()
+    if not d or d['status'] == 'Respondida': conn.close(); return jsonify({"error": "Enlace inválido o ya respondido"}), 400
+    
+    for resp in p.get('responses', []):
+        c.execute('INSERT INTO survey_responses (id, dispatch_id, question_id, score, comment, responded_at) VALUES (?, ?, ?, ?, ?, ?)',
+                  (gen_id(), d['id'], resp['question_id'], resp.get('score'), resp.get('comment', ''), now))
+        
+    c.execute("UPDATE survey_dispatches SET status='Respondida', responded_at=? WHERE id=?", (now, d['id']))
+    conn.commit(); conn.close(); return jsonify({"status": "success"})
+
+@app.route('/api/surveys/dashboard', methods=['GET'])
+@login_required
+def get_surveys_dashboard():
+    conn = get_db(); c = conn.cursor()
+    
+    area_id = request.args.get('area_id')
+    role = session.get('role', 'auditor')
+    def apply_dashboard_filters(q, params, table_alias='d', audit_id_column='audit_id'):
+        q = append_auth_filter(q, params, table_alias=table_alias, audit_id_column=audit_id_column)
+        if area_id and role in ('admin', 'gerente'):
+            c_temp = get_db().cursor()
+            c_temp.execute('SELECT name FROM areas WHERE id=?', (area_id,))
+            area_row = c_temp.fetchone()
+            if area_row:
+                area_name = area_row['name']
+                prefix = f"{table_alias}." if table_alias else ""
+                q += f" AND ({prefix}{audit_id_column} IN (SELECT audit_id FROM audit_areas WHERE area_id=?) OR a.responsible_area LIKE ? OR a.responsible_area = ?)"
+                params.extend([area_id, f'%"{area_name}"%', area_name])
+            else:
+                q += " AND 1=0"
+        return q
+    
+    q_dis = "SELECT d.status, d.audit_id, a.name as audit_name FROM survey_dispatches d JOIN audits a ON d.audit_id = a.id WHERE a.deleted_at IS NULL"
+    params_dis = []
+    q_dis = apply_dashboard_filters(q_dis, params_dis)
+    c.execute(q_dis, params_dis)
+    dispatches = c.fetchall()
+    
+    total_sent = len(dispatches)
+    total_completed = sum(1 for d in dispatches if d['status'] == 'Respondida')
+    
+    q_res = """
+    SELECT r.score
+    FROM survey_responses r
+    JOIN survey_dispatches d ON r.dispatch_id = d.id
+    JOIN survey_questions q ON r.question_id = q.id
+    JOIN audits a ON d.audit_id = a.id
+    WHERE q.question_type IN ('escala', 'scale') AND a.deleted_at IS NULL
+    """
+    params_res = []
+    q_res = apply_dashboard_filters(q_res, params_res)
+    c.execute(q_res, params_res)
+    responses = c.fetchall()
+    
+    avg_score = 0
+    if responses:
+        valid_scores = [float(r['score']) for r in responses if r['score'] is not None]
+        if valid_scores:
+            avg_score = sum(valid_scores) / len(valid_scores)
+            
+    # Rankings de Auditorías
+    q_audits = """
+    SELECT a.name as audit_name, AVG(CAST(r.score AS FLOAT)) as avg_score
+    FROM survey_responses r
+    JOIN survey_dispatches d ON r.dispatch_id = d.id
+    JOIN survey_questions q ON r.question_id = q.id
+    JOIN audits a ON d.audit_id = a.id
+    WHERE q.question_type IN ('escala', 'scale') AND a.deleted_at IS NULL
+    """
+    params_aud = []
+    q_audits = apply_dashboard_filters(q_audits, params_aud)
+    q_audits += " GROUP BY a.id, a.name HAVING count(r.id) > 0 ORDER BY avg_score DESC"
+    c.execute(q_audits, params_aud)
+    audit_ranking = [dict(r) for r in c.fetchall()]
+
+    # Rankings de Preguntas
+    q_questions = """
+    SELECT q.question_text, AVG(CAST(r.score AS FLOAT)) as avg_score
+    FROM survey_responses r
+    JOIN survey_dispatches d ON r.dispatch_id = d.id
+    JOIN survey_questions q ON r.question_id = q.id
+    JOIN audits a ON d.audit_id = a.id
+    WHERE q.question_type IN ('escala', 'scale') AND a.deleted_at IS NULL
+    """
+    params_q = []
+    q_questions = apply_dashboard_filters(q_questions, params_q)
+    q_questions += " GROUP BY q.question_text HAVING count(r.id) > 0 ORDER BY avg_score DESC"
+    c.execute(q_questions, params_q)
+    question_ranking = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+    return jsonify({
+        "total_sent": total_sent,
+        "total_completed": total_completed,
+        "response_rate": round(total_completed / total_sent * 100, 1) if total_sent > 0 else 0,
+        "avg_score": round(avg_score, 1),
+        "audit_ranking": audit_ranking,
+        "question_ranking": question_ranking
+    })
+
+@app.route('/api/surveys/history', methods=['GET'])
+@login_required
+def get_surveys_history():
+    conn = get_db(); c = conn.cursor()
+    q = """
+    SELECT d.id, d.audit_id, d.status, d.sent_at, d.responded_at, d.token,
+           a.name as audit_name, a.responsible_area,
+           s.name as stakeholder_name, s.email as stakeholder_email, s.role_title as stakeholder_role,
+           (SELECT AVG(CAST(r.score AS FLOAT)) FROM survey_responses r JOIN survey_questions q ON r.question_id = q.id WHERE r.dispatch_id = d.id AND q.question_type IN ('escala', 'scale')) as avg_score
+    FROM survey_dispatches d
+    JOIN audits a ON d.audit_id = a.id
+    JOIN audit_stakeholders s ON d.stakeholder_id = s.id
+    WHERE a.deleted_at IS NULL
+    """
+    params = []
+    area_id = request.args.get('area_id')
+    year = request.args.get('year')
+    search = request.args.get('search')
+    status_filter = request.args.get('status')
+    
+    role = session.get('role', 'auditor')
+    q = append_auth_filter(q, params, table_alias='d', audit_id_column='audit_id')
+    if area_id and role in ('admin', 'gerente'):
+        c_temp = get_db().cursor()
+        c_temp.execute('SELECT name FROM areas WHERE id=?', (area_id,))
+        area_row = c_temp.fetchone()
+        if area_row:
+            area_name = area_row['name']
+            q += " AND (d.audit_id IN (SELECT audit_id FROM audit_areas WHERE area_id=?) OR a.responsible_area LIKE ? OR a.responsible_area = ?)"
+            params.extend([area_id, f'%"{area_name}"%', area_name])
+        else:
+            q += " AND 1=0"
+            
+    if year:
+        q += " AND strftime('%Y', d.sent_at) = ?"
+        params.append(year)
+    if status_filter:
+        q += " AND d.status = ?"
+        params.append(status_filter)
+    if search:
+        term = f"%{search}%"
+        q += " AND (a.name LIKE ? OR s.name LIKE ? OR s.email LIKE ?)"
+        params.extend([term, term, term])
+        
+    q += " ORDER BY d.sent_at DESC"
+    c.execute(q, params)
+    history = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify(history)
+
+@app.route('/api/settings/survey', methods=['GET'])
+@login_required
+def get_survey_settings():
+    if session.get('role') != 'admin':
+        return jsonify({"error": "No autorizado"}), 403
+    conn = get_db(); c = conn.cursor()
+    c.execute("SELECT key, value FROM global_settings")
+    settings = {row['key']: row['value'] for row in c.fetchall()}
+    conn.close()
+    
+    # Hide password
+    if settings.get('smtp_pass'):
+        settings['smtp_pass'] = '********'
+        
+    return jsonify(settings)
+
+@app.route('/api/settings/survey', methods=['POST'])
+@login_required
+def update_survey_settings():
+    if session.get('role') != 'admin':
+        return jsonify({"error": "No autorizado"}), 403
+    data = request.json
+    conn = get_db(); c = conn.cursor()
+    
+    for key in ['smtp_host', 'smtp_port', 'smtp_user', 'survey_email_subject', 'survey_email_body']:
+        if key in data:
+            c.execute("UPDATE global_settings SET value = ? WHERE key = ?", (data[key], key))
+            
+    if 'smtp_pass' in data and data['smtp_pass'] != '********':
+        c.execute("UPDATE global_settings SET value = ? WHERE key = ?", (data['smtp_pass'], 'smtp_pass'))
+        
+    conn.commit()
+    log_activity(c, 'EDITAR', 'Configuración', 'email', 'Actualización de configuración de correo')
+    conn.close()
+    return jsonify({"status": "success"})
+
+@app.route('/api/surveys/<did>/resend', methods=['POST'])
+@login_required
+def resend_global_survey(did):
+    conn = get_db(); c = conn.cursor()
+    q = "SELECT d.*, s.email, s.name, a.name as audit_name FROM survey_dispatches d JOIN audit_stakeholders s ON d.stakeholder_id = s.id JOIN audits a ON d.audit_id = a.id WHERE d.id = ?"
+    params = [did]
+    q = append_auth_filter(q, params, table_alias='d', audit_id_column='audit_id')
+    c.execute(q, params)
+    dispatch = c.fetchone()
+    
+    if not dispatch:
+        conn.close()
+        return jsonify({"status":"error", "message":"No encontrado o sin permiso"}), 404
+        
+    try:
+        send_survey_email(dispatch['email'], dispatch['name'], dispatch['audit_name'], dispatch['token'])
+        c.execute("UPDATE survey_dispatches SET sent_at = ? WHERE id = ?", (datetime.now().isoformat(), did))
+        conn.commit()
+        log_activity(c, 'REENVIAR', 'Encuesta', did, f"Reenvío de encuesta a {dispatch['email']}")
+        conn.close()
+        return jsonify({"status":"success"})
+    except Exception as e:
+        conn.close()
+        return jsonify({"status":"error", "message": str(e)}), 500
+
 # ─── Main ────────────────────────────────────────────────────────────────────
+
 
 if __name__ == '__main__':
     init_db()

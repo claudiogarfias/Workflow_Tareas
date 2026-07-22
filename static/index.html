@@ -137,7 +137,7 @@
           <h1 class="font-headline text-base text-white font-extrabold tracking-tight leading-tight">Workflow de Seguimiento</h1>
           <div class="flex items-center gap-2 mt-0.5">
             <p class="text-[10px] uppercase font-bold text-white/60 tracking-widest">Auditoría Interna</p>
-            <span class="bg-white/10 text-white/70 text-[8px] px-1.5 py-0.5 rounded font-bold tracking-widest">V1.0.0</span>
+            <span class="bg-white/10 text-white/70 text-[8px] px-1.5 py-0.5 rounded font-bold tracking-widest">V2.0.0</span>
           </div>
         </div>
       </div>
@@ -170,6 +170,9 @@
         </button>
         <button class="flex items-center gap-3 p-4 text-white/70 hover:bg-white/10 hover:text-white rounded-2xl font-body transition-all text-sm font-semibold w-full text-left group nav-item" data-view="master" onclick="app.navigate('master')">
           <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">database</span> Datos Maestros
+        </button>
+        <button class="flex items-center gap-3 p-4 text-white/70 hover:bg-white/10 hover:text-white rounded-2xl font-body transition-all text-sm font-semibold w-full text-left group nav-item" data-view="surveys" onclick="app.navigate('surveys')" style="display:none">
+          <span class="material-symbols-outlined text-[22px] group-hover:scale-110 transition-transform">how_to_reg</span> Encuestas
         </button>
         <div id="adminMenu" class="hidden flex-col gap-2 mt-2">
           <div class="h-px bg-white/10 mx-4"></div>
@@ -246,8 +249,8 @@
   
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-  <script src="core.js?v=14"></script>
-  <script src="views.js?v=14"></script>
+  <script src="core.js?v=21"></script>
+  <script src="views.js?v=22"></script>
   
   <!-- Inline script to hook active class switching so it works beautifully -->
   <script>

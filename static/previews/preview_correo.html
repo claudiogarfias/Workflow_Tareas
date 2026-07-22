@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vista Previa: Correo de Notificación de Encuesta</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .preview-bar {
+            max-width: 650px;
+            margin: 0 auto 15px auto;
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .email-card {
+            max-width: 650px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+        }
+        .email-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .email-header p {
+            margin: 8px 0 0 0;
+            font-size: 13px;
+            opacity: 0.85;
+        }
+        .email-body {
+            padding: 35px 30px;
+            line-height: 1.6;
+        }
+        .greeting {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 15px;
+        }
+        .audit-info-box {
+            background-color: #f8fafc;
+            border-left: 4px solid #2563eb;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 6px 6px 0;
+        }
+        .audit-info-box table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .audit-info-box td {
+            padding: 4px 0;
+            font-size: 13px;
+        }
+        .audit-info-box td.label {
+            color: #64748b;
+            width: 130px;
+            font-weight: 500;
+        }
+        .audit-info-box td.val {
+            color: #0f172a;
+            font-weight: 600;
+        }
+        .cta-container {
+            text-align: center;
+            margin: 35px 0 25px 0;
+        }
+        .cta-button {
+            display: inline-block;
+            background: #2563eb;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 15px;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+            transition: all 0.2s ease;
+        }
+        .cta-button:hover {
+            background: #1d4ed8;
+            box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4);
+        }
+        .security-notice {
+            background: #f1f5f9;
+            padding: 12px 15px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #475569;
+            margin-top: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .email-footer {
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="preview-bar">
+        <span>📧 <strong>VISTA PREVIA DEL CORREO CORPORATIVO</strong> (Simulación de lo que recibirá el auditado)</span>
+        <button onclick="window.print()" style="background:#fff; border:1px solid #ccc; padding:3px 10px; border-radius:4px; cursor:pointer;">Imprimir / PDF</button>
+    </div>
+
+    <div class="email-card">
+        <div class="email-header">
+            <h1>Contraloría Interna</h1>
+            <p>Encuesta de Satisfacción Post-Auditoría</p>
+        </div>
+
+        <div class="email-body">
+            <div class="greeting">Estimado(a) Carlos Mendoza,</div>
+            <p>Le informamos que el proceso de auditoría en su área ha finalizado exitosamente. Para la Gerencia de Contraloría es de vital importancia conocer su percepción respecto del trabajo realizado, la oportunidad de las entregas y la comunicación de nuestro equipo.</p>
+
+            <div class="audit-info-box">
+                <table>
+                    <tr>
+                        <td class="label">Auditoría:</td>
+                        <td class="val">AUD-2026-015 - Revisión de Accesos y Seguridad TI</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Área Evaluada:</td>
+                        <td class="val">Tecnología y Operaciones</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Equipo Auditor:</td>
+                        <td class="val">Claudio Garfias / Juan Pérez</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Fecha Cierre:</td>
+                        <td class="val">21 de Julio de 2026</td>
+                    </tr>
+                </table>
+            </div>
+
+            <p>Le invitamos a responder el siguiente cuestionario. Su retroalimentación nos permite mantener los más altos estándares de calidad e identificar oportunidades de mejora continua.</p>
+
+            <div class="cta-container">
+                <a href="preview_encuesta.html" class="cta-button" target="_blank">Responder Encuesta de Satisfacción ➔</a>
+            </div>
+
+            <div class="security-notice">
+                🔒 <span><strong>Aviso de Seguridad:</strong> Este enlace es personal, único y seguro. Una vez enviadas sus respuestas, el enlace quedará inhabilitado automáticamente para proteger la integridad de los registros.</span>
+            </div>
+        </div>
+
+        <div class="email-footer">
+            <p><strong>Gerencia de Contraloría - CCAF Los Héroes</strong><br>
+            Este es un correo automático enviado desde la plataforma de Workflow de Tareas de Auditoría.</p>
+        </div>
+    </div>
+
+</body>
+</html>

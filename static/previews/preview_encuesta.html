@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encuesta de Satisfacción Post-Auditoría - Contraloría Interna</title>
+    <style>
+        :root {
+            --primary: #1e3a8a;
+            --primary-hover: #1d4ed8;
+            --bg-light: #f8fafc;
+            --border: #cbd5e1;
+            --score-4: #16a34a; /* Muy de acuerdo */
+            --score-3: #22c55e; /* De acuerdo */
+            --score-2: #eab308; /* Ni de acuerdo */
+            --score-1: #f97316; /* En desacuerdo */
+            --score-0: #ef4444; /* Muy en desacuerdo */
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 850px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
+            color: #ffffff;
+            padding: 30px;
+        }
+        .header h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .header p {
+            margin: 0;
+            opacity: 0.85;
+            font-size: 14px;
+        }
+        .meta-bar {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 15px 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            font-size: 13px;
+        }
+        .meta-item strong {
+            color: #64748b;
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .meta-item span {
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .instructions {
+            background-color: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 14px 18px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #1e40af;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .question-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+        .question-card:hover {
+            border-color: #cbd5e1;
+        }
+        .question-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .question-num {
+            background: #e2e8f0;
+            color: #475569;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .option-btn {
+            border: 2px solid #e2e8f0;
+            background: #fff;
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .option-btn:hover {
+            border-color: #94a3b8;
+            background: #f8fafc;
+        }
+        .option-btn.selected[data-score="4"] {
+            background: #dcfce7;
+            border-color: var(--score-4);
+            color: #15803d;
+        }
+        .option-btn.selected[data-score="3"] {
+            background: #f0fdf4;
+            border-color: var(--score-3);
+            color: #166534;
+        }
+        .option-btn.selected[data-score="2"] {
+            background: #fef9c3;
+            border-color: var(--score-2);
+            color: #854d0e;
+        }
+        .option-btn.selected[data-score="1"] {
+            background: #ffedd5;
+            border-color: var(--score-1);
+            color: #9a3412;
+        }
+        .option-btn.selected[data-score="0"] {
+            background: #fee2e2;
+            border-color: var(--score-0);
+            color: #991b1b;
+        }
+        .comment-box {
+            display: none;
+            margin-top: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+        .comment-box label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #b91c1c;
+            margin-bottom: 6px;
+        }
+        .comment-box textarea {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #fca5a5;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: inherit;
+            font-size: 13px;
+            background: #fff5f5;
+            resize: vertical;
+            min-height: 60px;
+        }
+        .text-question textarea {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 80px;
+        }
+        .submit-section {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .btn-submit {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            transition: transform 0.1s, box-shadow 0.2s;
+        }
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+        .live-score-badge {
+            margin-top: 15px;
+            display: inline-block;
+            background: #f1f5f9;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #475569;
+        }
+        .live-score-badge strong {
+            color: #1e3a8a;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Cuestionario Post-Auditoría Interna</h1>
+            <p>Gerencia de Contraloría - CCAF Los Héroes</p>
+        </div>
+
+        <div class="meta-bar">
+            <div class="meta-item">
+                <strong>Auditoría</strong>
+                <span>AUD-2026-015: Revisión de Accesos TI</span>
+            </div>
+            <div class="meta-item">
+                <strong>Área Auditada</strong>
+                <span>Tecnología y Operaciones</span>
+            </div>
+            <div class="meta-item">
+                <strong>Evaluador</strong>
+                <span>Carlos Mendoza (Contraparte)</span>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="instructions">
+                💡 <strong>Instrucciones:</strong> Seleccione el nivel de acuerdo para cada afirmación. En caso de seleccionar <em>"Ni de acuerdo, ni en desacuerdo"</em>, <em>"En desacuerdo"</em> o <em>"Muy en desacuerdo"</em>, se habilitará una casilla para justificar brevemente su evaluación.
+            </div>
+
+            <form id="surveyForm" onsubmit="event.preventDefault(); submitDemo();">
+                <!-- P1 -->
+                <div class="question-card" data-qid="1" data-weight="3.0">
+                    <div class="question-title">
+                        <span class="question-num">1</span>
+                        ¿Considera que la reunión de "Kick Off" o "Mail de Inicio de la Auditoría" fue clara respecto de los objetivos de la auditoría?
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(1, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(1, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(1, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(1, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(1, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-1">
+                        <label>⚠️ Justificación requerida (debido a su valoración):</label>
+                        <textarea placeholder="Por favor explique las razones de su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P2 -->
+                <div class="question-card" data-qid="2" data-weight="3.0">
+                    <div class="question-title">
+                        <span class="question-num">2</span>
+                        La auditoría se desarrolló de manera objetiva y profesional.
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(2, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(2, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(2, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(2, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(2, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-2">
+                        <label>⚠️ Justificación requerida:</label>
+                        <textarea placeholder="Por favor explique su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P3 -->
+                <div class="question-card" data-qid="3" data-weight="3.0">
+                    <div class="question-title">
+                        <span class="question-num">3</span>
+                        En el transcurso de la auditoría, ¿se mantuvo una comunicación permanente?
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(3, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(3, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(3, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(3, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(3, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-3">
+                        <label>⚠️ Justificación requerida:</label>
+                        <textarea placeholder="Por favor explique su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P4 -->
+                <div class="question-card" data-qid="4" data-weight="2.0">
+                    <div class="question-title">
+                        <span class="question-num">4</span>
+                        ¿Se consideraron plazos suficientes para la entrega de información?
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(4, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(4, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(4, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(4, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(4, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-4">
+                        <label>⚠️ Justificación requerida:</label>
+                        <textarea placeholder="Por favor explique su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P5 -->
+                <div class="question-card" data-qid="5" data-weight="1.0">
+                    <div class="question-title">
+                        <span class="question-num">5</span>
+                        ¿La comunicación de los resultados de la auditoría tuvo instancias para la revisión de ellos en forma oportuna?
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(5, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(5, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(5, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(5, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(5, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-5">
+                        <label>⚠️ Justificación requerida:</label>
+                        <textarea placeholder="Por favor explique su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P6 -->
+                <div class="question-card" data-qid="6" data-weight="3.0">
+                    <div class="question-title">
+                        <span class="question-num">6</span>
+                        El área tuvo el tiempo acordado para la entrega de respuestas.
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(6, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(6, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(6, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(6, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(6, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-6">
+                        <label>⚠️ Justificación requerida:</label>
+                        <textarea placeholder="Por favor explique su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P7 -->
+                <div class="question-card" data-qid="7" data-weight="2.0">
+                    <div class="question-title">
+                        <span class="question-num">7</span>
+                        ¿La auditoría interna realizada en su proceso / área, aportó oportunidades de mejora para su gestión y operación?
+                    </div>
+                    <div class="options-grid">
+                        <div class="option-btn" data-score="4" onclick="selectScore(7, 4)">Muy de acuerdo</div>
+                        <div class="option-btn" data-score="3" onclick="selectScore(7, 3)">De acuerdo</div>
+                        <div class="option-btn" data-score="2" onclick="selectScore(7, 2)">Ni de acuerdo, ni en desacuerdo</div>
+                        <div class="option-btn" data-score="1" onclick="selectScore(7, 1)">En desacuerdo</div>
+                        <div class="option-btn" data-score="0" onclick="selectScore(7, 0)">Muy en desacuerdo</div>
+                    </div>
+                    <div class="comment-box" id="comment-7">
+                        <label>⚠️ Justificación requerida:</label>
+                        <textarea placeholder="Por favor explique su respuesta..."></textarea>
+                    </div>
+                </div>
+
+                <!-- P8 -->
+                <div class="question-card text-question">
+                    <div class="question-title">
+                        <span class="question-num">8</span>
+                        ¿Considera que existen aspectos positivos destacables?
+                    </div>
+                    <textarea placeholder="Ingrese sus comentarios o aspectos a destacar del proceso..."></textarea>
+                </div>
+
+                <!-- P9 -->
+                <div class="question-card text-question">
+                    <div class="question-title">
+                        <span class="question-num">9</span>
+                        ¿Considera que existen aspectos mejorables acerca de la auditoría interna?
+                    </div>
+                    <textarea placeholder="Ingrese sugerencias o aspectos a mejorar..."></textarea>
+                </div>
+
+                <div class="submit-section">
+                    <button type="submit" class="btn-submit">Enviar Respuestas ➔</button>
+                    <div>
+                        <div class="live-score-badge">
+                            Puntaje Ponderado Estimado: <strong id="scoreVal">0.00 / 4.00</strong> | Satisfacción: <strong id="pctVal">0.0%</strong>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const scores = {};
+        const weights = { 1: 3.0, 2: 3.0, 3: 3.0, 4: 2.0, 5: 1.0, 6: 3.0, 7: 2.0 };
+
+        function selectScore(qid, score) {
+            scores[qid] = score;
+            const card = document.querySelector(`.question-card[data-qid="${qid}"]`);
+            card.querySelectorAll('.option-btn').forEach(btn => btn.classList.remove('selected'));
+            card.querySelector(`.option-btn[data-score="${score}"]`).classList.add('selected');
+
+            const commentBox = document.getElementById(`comment-${qid}`);
+            if (commentBox) {
+                if (score <= 2) {
+                    commentBox.style.display = 'block';
+                } else {
+                    commentBox.style.display = 'none';
+                }
+            }
+            calculateLiveScore();
+        }
+
+        function calculateLiveScore() {
+            let totalWeightedScore = 0;
+            let totalWeight = 0;
+            for (let qid in weights) {
+                if (scores.hasOwnProperty(qid)) {
+                    totalWeightedScore += scores[qid] * weights[qid];
+                    totalWeight += weights[qid];
+                }
+            }
+            if (totalWeight === 0) return;
+            const avg = totalWeightedScore / totalWeight;
+            const pct = (avg / 4.0) * 100;
+            document.getElementById('scoreVal').textContent = avg.toFixed(2) + ' / 4.00';
+            document.getElementById('pctVal').textContent = pct.toFixed(1) + '%';
+        }
+
+        function submitDemo() {
+            if (Object.keys(scores).length < 7) {
+                alert('Por favor responda las 7 preguntas de valoración antes de enviar.');
+                return;
+            }
+            alert('🎉 ¡Demostración exitosa!\n\nRespuestas registradas correctamente.\n% Satisfacción calculado: ' + document.getElementById('pctVal').textContent);
+        }
+
+        // Pre-select mock values matching the user's Excel example (2.43 / 60.7%)
+        selectScore(1, 3); // De acuerdo
+        selectScore(2, 3); // De acuerdo
+        selectScore(3, 3); // De acuerdo
+        selectScore(4, 2); // Ni de acuerdo
+        selectScore(5, 1); // En desacuerdo
+        selectScore(6, 3); // De acuerdo
+        selectScore(7, 2); // Ni de acuerdo
+    </script>
+</body>
+</html>
