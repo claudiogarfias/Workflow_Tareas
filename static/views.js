@@ -2080,7 +2080,7 @@ app.loadAuditSurveySection = async function(aid, isReadonly) {
                 <td class="text-[13px] py-3 text-on-surface-variant">${s.role_title}</td>
                 <td class="py-3 text-[13px] font-semibold">
                   <span class="px-2 py-1 rounded-md bg-opacity-10 ${s.survey_status==='Respondida'?'text-green-600 bg-green-500':(s.survey_status==='Enviada'?'text-amber-600 bg-amber-500':'text-on-surface-variant bg-surface-variant')}">
-                    ${s.survey_status === 'Respondida' && s.avg_score ? `Nota ${((s.avg_score - 1) * 1.5 + 1).toFixed(1)}` : (s.survey_status || 'Sin Enviar')}
+                    ${s.survey_status === 'Respondida' && s.avg_score !== null ? `<span class="font-bold text-primary">${((s.avg_score / 4) * 100).toFixed(1)}%</span> Satisfacción` : (s.survey_status || 'Sin Enviar')}
                   </span>
                 </td>
                 ${!isReadonly ? `
@@ -2119,8 +2119,8 @@ app.showSurveyResultsModal = async function(aid) {
     });
     let avgGradeHtml = '';
     if (count > 0) {
-      const avgGrade = (((totalScore / count) - 1) * 1.5 + 1).toFixed(1);
-      avgGradeHtml = `<span class="ml-4 px-2 py-1 rounded-lg ${avgGrade < 4.0 ? 'bg-error-container text-error' : 'bg-green-100 text-green-700'} font-bold text-xs uppercase tracking-wider shadow-sm">Nota Final: ${avgGrade}</span>`;
+      const avgGrade = ((totalScore / count) / 4 * 100).toFixed(1);
+      avgGradeHtml = `<span class="ml-4 px-2 py-1 rounded-lg ${avgGrade < 50.0 ? 'bg-error-container text-error' : 'bg-green-100 text-green-700'} font-bold text-xs uppercase tracking-wider shadow-sm">${avgGrade}% Satisfacción</span>`;
     }
 
     html += `
@@ -2144,9 +2144,9 @@ app.showSurveyResultsModal = async function(aid) {
     r.data.forEach(ans => {
       let ansHtml = '';
       if (ans.type === 'escala' || ans.type === 'scale') {
-        const grade = ((ans.value - 1) * 1.5 + 1).toFixed(1);
+        const grade = ((ans.value / 4) * 100).toFixed(1);
         ansHtml = `<div class="flex items-center gap-2 mt-1.5">
-          <span class="font-bold text-sm px-2 py-0.5 rounded ${grade < 4.0 ? 'bg-error-container text-error' : 'bg-green-100 text-green-700'}">Nota ${grade}</span>
+          <span class="font-bold text-sm px-2 py-0.5 rounded ${grade < 50.0 ? 'bg-error-container text-error' : 'bg-green-100 text-green-700'}">${grade}%</span>
           ${ans.justification ? `<div class="text-xs text-on-surface-variant bg-surface-container-low p-2 rounded-lg w-full border-l-2 border-error italic">Justificación: "${ans.justification}"</div>` : ''}
         </div>`;
       } else {
@@ -2371,8 +2371,8 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
     const topQuestion = data?.question_ranking && data.question_ranking.length > 0 ? data.question_ranking[0] : null;
     const bottomQuestion = data?.question_ranking && data.question_ranking.length > 0 ? data.question_ranking[data.question_ranking.length - 1] : null;
     
-    const topGrade = topQuestion ? ((topQuestion.avg_score - 1) * 1.5 + 1).toFixed(1) : '-';
-    const bottomGrade = bottomQuestion ? ((bottomQuestion.avg_score - 1) * 1.5 + 1).toFixed(1) : '-';
+    const topGrade = topQuestion ? ((topQuestion.avg_score / 4) * 100).toFixed(1) + '%' : '-';
+    const bottomGrade = bottomQuestion ? ((bottomQuestion.avg_score / 4) * 100).toFixed(1) + '%' : '-';
 
     const insightsHtml = data?.question_ranking && data.question_ranking.length > 0 ? `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
@@ -2382,7 +2382,7 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
             <h3 class="font-bold text-sm uppercase tracking-widest text-white/80">Aspecto Destacado</h3>
           </div>
           <div class="text-white font-bold text-lg leading-tight mb-6">"${topQuestion.question_text}"</div>
-          <div class="inline-flex items-center gap-2 bg-green-500/20 text-green-300 px-3 py-1.5 rounded-lg font-bold text-sm border border-green-500/20">Nota Promedio: ${topGrade}</div>
+          <div class="inline-flex items-center gap-2 bg-green-500/20 text-green-300 px-3 py-1.5 rounded-lg font-bold text-sm border border-green-500/20">% Satisfacción: ${topGrade}</div>
         </div>
         <div class="bg-surface-container-low p-8 rounded-[2rem] shadow-ambient border border-white/5">
           <div class="flex items-center gap-3 mb-4 text-red-400">
@@ -2390,7 +2390,7 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
             <h3 class="font-bold text-sm uppercase tracking-widest text-white/80">Oportunidad de Mejora</h3>
           </div>
           <div class="text-white font-bold text-lg leading-tight mb-6">"${bottomQuestion.question_text}"</div>
-          <div class="inline-flex items-center gap-2 bg-red-500/20 text-red-300 px-3 py-1.5 rounded-lg font-bold text-sm border border-red-500/20">Nota Promedio: ${bottomGrade}</div>
+          <div class="inline-flex items-center gap-2 bg-red-500/20 text-red-300 px-3 py-1.5 rounded-lg font-bold text-sm border border-red-500/20">% Satisfacción: ${bottomGrade}</div>
         </div>
       </div>
     ` : `
@@ -2414,8 +2414,8 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
         </div>
         <div class="bg-surface-container-lowest p-8 rounded-[2rem] shadow-ambient flex flex-col justify-center items-center text-center">
           <div class="w-14 h-14 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center mb-4"><span class="material-symbols-outlined text-3xl">star</span></div>
-          <div class="text-4xl font-headline font-extrabold text-on-surface">${data?.avg_score ? ((data.avg_score - 1) * 1.5 + 1).toFixed(1) : '1.0'}<span class="text-lg text-on-surface-variant/50">/7.0</span></div>
-          <div class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60 mt-2">Promedio General</div>
+          <div class="text-4xl font-headline font-extrabold text-on-surface">${data?.avg_score !== null ? ((data.avg_score / 4) * 100).toFixed(1) + '%' : '0%'}</div>
+          <div class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60 mt-2">Promedio General Satisfacción</div>
         </div>
       </div>
       ${insightsHtml}
@@ -2510,7 +2510,7 @@ app.renderSurveysModule = async function(updateKey = null, updateVal = null) {
                       <span class="px-2 py-1 rounded-lg text-xs font-bold ${statusColor}">${h.status}</span>
                     </td>
                     <td class="p-4 font-bold text-sm">
-                      ${h.status.toUpperCase() === 'RESPONDIDA' && h.avg_score ? `<span class="text-green-700 bg-green-100 px-2 py-1 rounded">Nota ${((h.avg_score - 1) * 1.5 + 1).toFixed(1)}</span>` : '<span class="text-on-surface-variant/40">—</span>'}
+                      ${h.status.toUpperCase() === 'RESPONDIDA' && h.avg_score !== null ? `<span class="text-green-700 bg-green-100 px-2 py-1 rounded">${((h.avg_score / 4) * 100).toFixed(1)}% Satisfacción</span>` : '<span class="text-on-surface-variant/40">—</span>'}
                     </td>
                     <td class="p-4 text-center">
                       ${isPending ? `<button class="text-primary hover:text-primary-container bg-primary/10 hover:bg-primary/20 p-2 rounded-xl transition-colors" onclick="app.resendGlobalSurvey('${h.id}')" title="Reenviar Correo"><span class="material-symbols-outlined text-[18px]">forward_to_inbox</span></button>` : `<div class="flex flex-col items-center gap-1"><span class="text-on-surface-variant/40 text-[10px] uppercase font-bold tracking-widest">Respondida<br>${this.fmtDate(h.responded_at)} ${new Date(h.responded_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span><button class="text-primary text-[10px] uppercase font-bold hover:underline" onclick="app.showSurveyResultsModal('${h.audit_id}')">Ver Detalle</button></div>`}
